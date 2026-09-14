@@ -1,10 +1,13 @@
 {
   "name": "yaniv-online",
-  "version": "1.0.1",
-  "scripts": {"start": "node server.js"},
+  "version": "4.0.0",
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "express": "^4.21.2",
     "socket.io": "^4.8.1",
     "three": "0.160.1"
-  }
+  },
+  "description": "Yaniv Café multijoueur — terrasse tunisienne 3D en vue première personne"
 }

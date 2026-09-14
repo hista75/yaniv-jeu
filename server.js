@@ -4,10 +4,12 @@ const { Server } = require('socket.io');
 const path = require('path');
 
 const app = express();
+const BUILD = '4.0.0-terrasse-realiste';
 const server = http.createServer(app);
 const io = new Server(server);
 app.use((req,res,next)=>{ res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate'); next(); });
 app.use('/vendor', express.static(path.join(__dirname, 'node_modules', 'three', 'build')));
+app.get('/version', (req,res)=>res.json({build:BUILD, generated:'2026-09-15'}));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
@@ -315,4 +317,4 @@ io.on('connection', s => {
   });
 });
 
-server.listen(process.env.PORT || 3000, () => console.log('Yaniv Café sur http://localhost:' + (process.env.PORT || 3000)));
+server.listen(process.env.PORT || 3000, () => console.log(`Yaniv Café ${BUILD} sur http://localhost:${process.env.PORT || 3000}`));
