@@ -1,31 +1,17 @@
-# Yaniv Café 3D — version finale
+# Yaniv Café 3D — version corrigée
 
-Jeu Yaniv multijoueur en temps réel (Node.js + Socket.IO) avec vue 3D en première personne.
-
-## Nouveautés
+- Multijoueur Socket.IO, jusqu’à 4 joueurs.
 - 5 cartes exactement au début de chaque manche.
-- Table carrée style café tunisien / plastique avec nappe rouge.
-- Vue première personne : ton propre personnage n'est pas affiché devant toi.
-- Jusqu'à 4 joueurs autour de la table.
-- Choix du personnage avant de créer/rejoindre : Classique, Jeune, Costaud, Nain, Vieux, BG.
-- Personnages 3D procéduraux : mouvements de tête et de bras.
-- Animation 3D lorsqu'un joueur pose ou pioche une carte.
-- Glisser horizontalement sur la scène pour regarder les joueurs assis à tes côtés.
-- Bouton Règles intégré.
-- Yaniv ≤ 7, Assaf +30, Joker 0 pour l'Assaf / +10 chez les autres à la fin.
-- Suites circulaires R → As, ordre de pose conservé pour le bait.
-- Élimination progressive à 200 points.
-- Chambrage après Yaniv réussi avec synthèse vocale disponible sur l'appareil.
+- Vue première personne : ton propre avatar n’est pas affiché.
+- Les autres joueurs sont des personnages 3D autour d’une table carrée de café avec nappe.
+- Choix de personnage avant le salon : Classique, Jeune, Costaud, Nain, Vieux, BG.
+- Les adversaires tiennent visuellement le bon nombre de cartes (dos uniquement).
+- Mouvements de tête vers le joueur actif.
+- Animation du bras et d’une carte lors d’une pose ou d’une pioche.
+- Vue gauche/droite par glissement ou avec les boutons ‹ ›.
+- Règles accessibles depuis le bouton 📖.
+- Yaniv ≤ 7, Assaf +30, Joker, bait, élimination à 200.
 
-## Lancer en local
-```bash
-npm install
-npm start
-```
-Puis ouvre `http://localhost:3000`.
-
-## Mettre à jour Render
-Remplace les fichiers de ton dépôt GitHub par ceux de ce dossier, puis commit/push. Render redéploiera automatiquement si l'auto-deploy est activé.
-
-## Note 3D
-La scène utilise Three.js chargé depuis jsDelivr. Les personnages sont générés directement en 3D dans le navigateur : il n'y a pas de fichiers de modèles externes à gérer.
+## Déploiement Render
+Build command: `npm install`
+Start command: `npm start`
