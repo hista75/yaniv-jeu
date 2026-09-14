@@ -28,6 +28,13 @@ Puis ouvrir `http://localhost:3000`.
 
 Ouvrir `/version` sur le site. Cette archive doit répondre :
 
-`4.0.0-terrasse-realiste`
+`4.1.0-arrivee-avatar-chaises`
 
 Cela permet de vérifier immédiatement si Render sert le bon commit.
+
+
+## Ajustements 4.1
+
+- Un avatar 3D apparaît immédiatement avec une petite animation quand un nouveau joueur rejoint le salon.
+- Les trois places adverses ont été reculées : les corps et les chaises ne traversent plus le bord de la table.
+- Ta propre chaise est aussi reculée derrière la caméra pour renforcer la vue assise.

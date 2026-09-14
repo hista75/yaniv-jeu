@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 
 const app = express();
-const BUILD = '4.0.0-terrasse-realiste';
+const BUILD = '4.1.0-arrivee-avatar-chaises';
 const server = http.createServer(app);
 const io = new Server(server);
 app.use((req,res,next)=>{ res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate'); next(); });
