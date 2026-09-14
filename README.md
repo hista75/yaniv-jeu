@@ -1,21 +1,31 @@
-# Yaniv Café — multijoueur
+# Yaniv Café 3D — version finale
+
+Jeu Yaniv multijoueur en temps réel (Node.js + Socket.IO) avec vue 3D en première personne.
+
+## Nouveautés
+- 5 cartes exactement au début de chaque manche.
+- Table carrée style café tunisien / plastique avec nappe rouge.
+- Vue première personne : ton propre personnage n'est pas affiché devant toi.
+- Jusqu'à 4 joueurs autour de la table.
+- Choix du personnage avant de créer/rejoindre : Classique, Jeune, Costaud, Nain, Vieux, BG.
+- Personnages 3D procéduraux : mouvements de tête et de bras.
+- Animation 3D lorsqu'un joueur pose ou pioche une carte.
+- Glisser horizontalement sur la scène pour regarder les joueurs assis à tes côtés.
+- Bouton Règles intégré.
+- Yaniv ≤ 7, Assaf +30, Joker 0 pour l'Assaf / +10 chez les autres à la fin.
+- Suites circulaires R → As, ordre de pose conservé pour le bait.
+- Élimination progressive à 200 points.
+- Chambrage après Yaniv réussi avec synthèse vocale disponible sur l'appareil.
 
 ## Lancer en local
-1. Installe Node.js 18+.
-2. Dans ce dossier : `npm install`
-3. Lance : `npm start`
-4. Ouvre `http://localhost:3000`
+```bash
+npm install
+npm start
+```
+Puis ouvre `http://localhost:3000`.
 
-Pour jouer avec des amis sur Internet, déploie ce dossier sur un hébergeur Node.js compatible WebSockets (Socket.IO) et partage l'URL.
+## Mettre à jour Render
+Remplace les fichiers de ton dépôt GitHub par ceux de ce dossier, puis commit/push. Render redéploiera automatiquement si l'auto-deploy est activé.
 
-## Règles codées
-- 5 cartes distribuées à chaque joueur au début de chaque manche.
-- Tour strict : poser puis piocher.
-- Pose : 1 carte, groupe de même valeur, ou suite de même couleur (Joker autorisé).
-- Suites circulaires autorisant R → As, donc V-D-Joker-As est valide avec Joker=R.
-- L'ordre visuel choisi par le joueur est conservé pour le bait.
-- Pour la récupération, le serveur vérifie les vraies extrémités possibles de la suite, indépendamment de l'ordre affiché.
-- Yaniv à 7 ou moins ; réussi = 0 point.
-- Assaf si un autre joueur a une main de valeur <= : annonceur prend valeur de sa main + 30.
-- Joker = 0 pour la valeur courante et la comparaison Assaf ; Joker = +10 dans la main des autres à la fin d'un Yaniv.
-- Élimination à 200 points ou plus ; dernier survivant gagne.
+## Note 3D
+La scène utilise Three.js chargé depuis jsDelivr. Les personnages sont générés directement en 3D dans le navigateur : il n'y a pas de fichiers de modèles externes à gérer.
