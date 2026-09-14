@@ -1,3 +1,24 @@
+Yaniv Café V4.5 — règles de tour corrigées
+
+Nouveautés :
+- Une carte est mise au milieu avant le premier tour de chaque manche.
+- À ton tour : tu poses d’abord, puis tu choisis entre la pioche et une extrémité de la défausse du joueur précédent.
+- Ta pose devient la nouvelle défausse seulement après ta pioche/récupération.
+- Si tu pioches la même valeur que la carte/groupe de même valeur que tu viens de poser, tu peux la rajouter immédiatement au milieu avant le tour suivant.
+- Les suites restent valides à partir de 3 cartes, avec ou sans Joker.
+- Les suites utilisent une seule couleur/sorte et le Joker peut remplacer une carte manquante.
+- 2 paquets de 54 à partir de 6 joueurs.
+- 3 poses assises : normal, focus, chicha à eau.
+
+Note : « même symbole » est interprété ici comme même valeur/rang (ex. 7 sur 7).
+
+Yaniv Café V4.4 — poses assises
+
+- Personnages 3D un peu plus détaillés
+- 3 styles assis: normal, focus, chicha à eau
+- Avatars mieux positionnés sur leur chaise
+- Toujours 2 paquets à partir de 6 joueurs
+
 # Yaniv Café — V4 Terrasse réaliste
 
 Version multijoueur Node.js + Socket.IO + Three.js.
