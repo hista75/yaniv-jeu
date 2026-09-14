@@ -1,17 +1,17 @@
-# Yaniv Café 3D — version corrigée
+# Yaniv Café — Immersive 3D
 
-- Multijoueur Socket.IO, jusqu’à 4 joueurs.
-- 5 cartes exactement au début de chaque manche.
-- Vue première personne : ton propre avatar n’est pas affiché.
-- Les autres joueurs sont des personnages 3D autour d’une table carrée de café avec nappe.
-- Choix de personnage avant le salon : Classique, Jeune, Costaud, Nain, Vieux, BG.
-- Les adversaires tiennent visuellement le bon nombre de cartes (dos uniquement).
-- Mouvements de tête vers le joueur actif.
-- Animation du bras et d’une carte lors d’une pose ou d’une pioche.
-- Vue gauche/droite par glissement ou avec les boutons ‹ ›.
-- Règles accessibles depuis le bouton 📖.
-- Yaniv ≤ 7, Assaf +30, Joker, bait, élimination à 200.
+Version multijoueur Node.js + Socket.IO + Three.js.
 
-## Déploiement Render
-Build command: `npm install`
-Start command: `npm start`
+## Nouveautés visuelles
+- vraie caméra première personne depuis la chaise du joueur ;
+- regard libre gauche/droite + haut/bas (drag souris/tactile, flèches écran et clavier) ;
+- chaise du joueur + bras visibles quand on regarde vers le bas ;
+- personnages procéduraux 3D plus détaillés, avec 6 choix : Classique, Jeune, Costaud, Nain, Vieux, BG ;
+- têtes qui suivent le joueur actif ;
+- bras animés lors des poses et pioches ;
+- café tunisien 3D enrichi : murs, portes bleues, plantes, guirlande, table plastique, nappe, thé/café, théière, bol, téléphone et cendrier vide ;
+- exactement 5 cartes au début de chaque manche.
+
+## Render
+Build: `npm install`  
+Start: `npm start`
