@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 
 const app = express();
-const BUILD = '4.5.0-tour-defausse-bonus';
+const BUILD = 'T1-2D-skins-poses';
 const server = http.createServer(app);
 const io = new Server(server);
 app.use((req,res,next)=>{ res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate'); next(); });
@@ -122,8 +122,6 @@ function state(room, sid) {
     hand: p?.hand || [],
     discard: room.discard,
     legalPickup: room.legalPickup || [],
-    pendingDiscard: room.pendingDiscard || [],
-    bonusCardId: room.phase === 'bonus' && p?.id === sid ? room.bonusCardId || null : null,
     deckCount: room.deck.length,
     deckPacks: room.deckPacks || packCountFor(room),
     maxPlayers: MAX_PLAYERS,
@@ -155,9 +153,6 @@ function dealRound(room) {
   room.deck = d;
   room.discard = [room.deck.pop()];
   room.legalPickup = [room.discard[0].id];
-  room.pendingDiscard = [];
-  room.pendingLegalPickup = [];
-  room.bonusCardId = null;
   room.turn = room.players.findIndex(p => p.alive);
   room.phase = 'play';
 }
@@ -213,26 +208,6 @@ function endRound(room, caller) {
   room.message = `${base} Nouvelle manche : 5 cartes chacun. Au tour de ${room.players[room.turn].name}.`;
 }
 
-
-function canBonusAdd(pending, card) {
-  if (!card || !pending?.length) return false;
-  // "Même symbole" interprété comme même valeur : ex. 7 sur un 7 / groupe de 7.
-  // Le bonus est donc possible sur une carte seule ou un groupe de même valeur.
-  const rank = pending[0].r;
-  return pending.every(c => c.r === rank) && card.r === rank;
-}
-
-function finishTurn(room) {
-  room.discard = room.pendingDiscard?.length ? room.pendingDiscard : room.discard;
-  room.legalPickup = room.pendingDiscard?.length ? (room.pendingLegalPickup || []) : room.legalPickup;
-  room.pendingDiscard = [];
-  room.pendingLegalPickup = [];
-  room.bonusCardId = null;
-  next(room);
-  room.phase = 'play';
-  room.message = `Au tour de ${room.players[room.turn].name}`;
-}
-
 io.on('connection', s => {
   s.on('create', input => {
     const info = playerPayload(input);
@@ -241,7 +216,7 @@ io.on('connection', s => {
     rooms[code] = {
       code,
       players:[{ id:s.id, name:info.name, avatar:info.avatar, pose:info.pose, score:0, hand:[], alive:true }],
-      started:false, discard:[], legalPickup:[], pendingDiscard:[], pendingLegalPickup:[], bonusCardId:null, deck:[], turn:0, phase:'lobby',
+      started:false, discard:[], legalPickup:[], deck:[], turn:0, phase:'lobby',
       message:'Partage le code avec tes potes'
     };
     s.join(code);
@@ -278,14 +253,10 @@ io.on('connection', s => {
     if (!check.ok) return s.emit('errorMsg', 'Combinaison invalide : carte seule, même valeur, ou suite de même couleur avec Joker');
 
     p.hand = p.hand.filter(c => !ids.includes(c.id));
-    // La défausse visible reste celle du joueur précédent : c'est elle qu'on peut récupérer.
-    // Les nouvelles cartes sont mises de côté et deviendront la défausse du prochain joueur
-    // seulement après la pioche / récupération de ce tour.
-    r.pendingDiscard = chosen; // ordre choisi = bait visuel
-    r.pendingLegalPickup = check.pickup;
-    r.bonusCardId = null;
+    r.discard = chosen; // ordre choisi = bait visuel
+    r.legalPickup = check.pickup;
     r.phase = 'draw';
-    r.message = `${p.name} a posé ${chosen.length} carte(s). Il peut piocher ou récupérer une extrémité de la défausse précédente.`;
+    r.message = `${p.name} a posé ${chosen.length} carte(s). Il doit maintenant piocher.`;
     io.to(code).emit('gameAction', {
       type:'play', playerId:p.id, cards:chosen,
       text:`${p.name} pose ${chosen.length} carte${chosen.length > 1 ? 's' : ''}`
@@ -297,7 +268,6 @@ io.on('connection', s => {
     const r = rooms[code], p = r?.players[r.turn];
     if (!r || !r.started || p?.id !== s.id || r.phase !== 'draw') return s.emit('errorMsg', 'Tu dois poser avant de piocher');
 
-    let drawn;
     if (fromDeck) {
       if (!r.deck.length) {
         const keep = r.discard;
@@ -305,40 +275,20 @@ io.on('connection', s => {
         r.deck = deck(r.deckPacks);
         r.discard = keep;
       }
-      drawn = r.deck.pop();
-      p.hand.push(drawn);
-      io.to(code).emit('gameAction', { type:'drawDeck', playerId:p.id, card:drawn, text:`${p.name} pioche une carte` });
+      const c = r.deck.pop();
+      p.hand.push(c);
+      io.to(code).emit('gameAction', { type:'drawDeck', playerId:p.id, card:c, text:`${p.name} pioche une carte` });
     } else {
-      if (!r.legalPickup.includes(cardId)) return s.emit('errorMsg', "Cette carte n'est pas une vraie extrémité de la combinaison précédente");
-      drawn = r.discard.find(c => c.id === cardId);
-      if (!drawn) return;
-      p.hand.push(drawn);
-      r.discard = r.discard.filter(c => c.id !== cardId);
-      r.legalPickup = r.legalPickup.filter(id => id !== cardId);
-      io.to(code).emit('gameAction', { type:'drawDiscard', playerId:p.id, card:drawn, text:`${p.name} récupère ${drawn.r === 'JOKER' ? 'le Joker' : drawn.r + drawn.s}` });
+      if (!r.legalPickup.includes(cardId)) return s.emit('errorMsg', "Cette carte n'est pas une vraie extrémité de la combinaison");
+      const c = r.discard.find(c => c.id === cardId);
+      if (!c) return;
+      p.hand.push(c);
+      io.to(code).emit('gameAction', { type:'drawDiscard', playerId:p.id, card:c, text:`${p.name} récupère ${c.r === 'JOKER' ? 'le Joker' : c.r + c.s}` });
     }
 
-    if (canBonusAdd(r.pendingDiscard, drawn)) {
-      r.bonusCardId = drawn.id;
-      r.phase = 'bonus';
-      r.message = `${p.name} a pioché la même valeur que sa pose : il peut la rajouter au milieu avant le joueur suivant.`;
-    } else {
-      finishTurn(r);
-    }
-    emit(r);
-  });
-
-  s.on('bonusAdd', ({ code, add }) => {
-    const r = rooms[code], p = r?.players[r.turn];
-    if (!r || !r.started || p?.id !== s.id || r.phase !== 'bonus' || !r.bonusCardId) return;
-    const c = p.hand.find(x => x.id === r.bonusCardId);
-    if (add && c && canBonusAdd(r.pendingDiscard, c)) {
-      p.hand = p.hand.filter(x => x.id !== c.id);
-      r.pendingDiscard.push(c);
-      r.pendingLegalPickup = r.pendingDiscard.map(x => x.id); // groupe de même valeur : toute carte est récupérable
-      io.to(code).emit('gameAction', { type:'bonusAdd', playerId:p.id, card:c, text:`${p.name} rajoute ${c.r === 'JOKER' ? 'le Joker' : c.r + c.s} au milieu` });
-    }
-    finishTurn(r);
+    next(r);
+    r.phase = 'play';
+    r.message = `Au tour de ${r.players[r.turn].name}`;
     emit(r);
   });
 
