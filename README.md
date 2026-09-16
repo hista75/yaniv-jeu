@@ -1,10 +1,128 @@
-Yaniv Café — T1 2D tabs fixed
+# Yaniv Café · 6.1.0
 
-Correctifs de cette version :
-- skins mieux recadrés
-- onglets Jouer / Personnage / Salon / Règles / Paramètres actifs
-- couleur de table fonctionnelle (teinte appliquée dans la partie)
-- réglages enregistrés localement
-- version sans 3D, avec skins en image et poses
+Jeu de Yaniv entre amis, de **2 à 8 joueurs**, dans un café djerbien en vraie 3D. Le serveur possède toutes les cartes, valide les actions et calcule les scores. Aucun bot ni joueur fictif n’est créé dans une partie.
 
-Après upload sur GitHub, laisse Render redéployer. Vérifie /version => T1-2D-tabs-fixed
+## Lancer
+
+Prérequis : **Node.js 22.12 ou plus récent** et npm. Depuis ce dossier :
+
+```sh
+npm install
+npm run build
+npm start
+```
+
+Ouvrir **http://localhost:3000**. Choisir un pseudo, un skin et une pose, puis créer une table. Ouvrir une deuxième session/navigateur et rejoindre avec le code affiché. L’hôte lance à partir de deux joueurs.
+
+- Version : **http://localhost:3000/version**.
+- Port : variable d’environnement `PORT`, 3000 par défaut.
+- Tests : `npm test`.
+- Développement : `npm start` pour le serveur, puis `npm run dev` dans un second terminal. Vite transmet Socket.IO au port 3000.
+- Caméra : maintenir le clic gauche et glisser sur le décor ; glissement tactile sur mobile. Rotation limitée, aucun déplacement libre.
+- L’ordre des clics sur les cartes définit l’ordre de pose. Les petits numéros indiquent cet ordre. « Effacer » permet de recommencer.
+
+## Déploiement Render
+
+Créer **un Web Service Node.js**, connecté au repository contenant ce dossier à sa racine. Le fichier `render.yaml` fournit aussi un Blueprint.
+
+| Réglage           | Valeur                                |
+| ----------------- | ------------------------------------- |
+| Build Command     | `npm install && npm run build`        |
+| Start Command     | `npm start`                           |
+| Health Check Path | `/version`                            |
+| Node              | 22.16.0, configuré dans `render.yaml` |
+| Instances         | **1**                                 |
+
+Express sert `dist/` et Socket.IO utilise le même service, le même domaine et le même port. Le serveur écoute sur `0.0.0.0` et `process.env.PORT`. Aucun CDN n’est nécessaire au jeu.
+
+Après déploiement, vérifier **`https://NOM-DU-SERVICE.onrender.com/version`** : JSON contenant `version`, `build` (commit Render lorsqu’il est fourni), `rules` et `uptime`.
+
+Les salons vivent **en mémoire** : un redémarrage ou un déploiement les ferme. Ne pas multiplier les instances sans ajouter un stockage partagé et un adaptateur Socket.IO. Le Blueprint utilise le plan Starter pour éviter la mise en veille d’un service gratuit ; sa création chez Render reste à la charge du propriétaire. Aucun service payant n’a été créé automatiquement.
+
+Documentation de référence : [Render — Express](https://render.com/docs/deploy-node-express-app).
+
+## Architecture
+
+```text
+server/rules.js        Deck, combinaisons, extrémités, valeurs, scoring
+server/game.js         Machine à états et vues privées par joueur
+server/index.js        Express, Socket.IO, salons, reprise, délais
+src/main.ts           Menu, salon, sélection, chat, résultats, réglages
+src/scene.ts          Café 3D, caméra, sièges, cartes et déplacements
+src/avatar.ts         GLB skinné, poses, AnimationMixer, skins et regards
+src/cards.ts          Cartes et textures originales générées localement
+src/audio.ts          Mixeur Web Audio et voix locales facultatives
+public/assets/models/ Modèles GLB et licence Quaternius
+tests/                Règles, sockets réels et simulations complètes
+scripts/e2e.mjs       Contrôles UI Chromium + Firefox
+scripts/build.mjs     Build Vite avec transpilation TypeScript en processus
+```
+
+Machine à états :
+
+```text
+WAITING → PLAY → DRAW → [BONUS] → PLAY …
+             ↘ YANIV_REVEAL → ROUND_END → PLAY
+                            ↘ GAME_END
+```
+
+Chaque action de jeu utilise la session authentifiée du socket et une révision d’état. Un client ne peut pas agir à la place d’un autre, envoyer le deck ou imposer un score. Les snapshots n’envoient que sa main ; les événements de pioche du paquet ne contiennent pas la carte. Les mains sont révélées seulement après l’annonce de Yaniv.
+
+Reconnexion : jeton opaque stocké dans `sessionStorage`, place conservée pendant **30 secondes**. Un départ explicite libère immédiatement la place. Les sièges des autres joueurs restent fixes pendant la partie. Les joueurs éliminés restent visibles. Le pseudo et les messages sont affichés comme du texte, les actions et messages sont limités en fréquence.
+
+## Règles de cette version
+
+- 54 cartes pour 2–5 joueurs actifs ; 108 pour 6–8. Cinq cartes exactement, puis une carte de départ à la défausse.
+- As = 1 ; nombres = valeur nominale ; V/D/R = 10 ; Joker = 0 dans la main et pour comparer l’Assaf.
+- Une carte, un groupe de **même rang** (D avec D, pas D avec R), ou une suite d’au moins trois cartes de même enseigne. Joker wildcard uniquement pour les suites. Une suite peut boucler du Roi vers l’As, sans dépasser treize rangs.
+- L’ordre visuel sélectionné est conservé. Pour une suite, seules ses extrémités **logiques** sont récupérables, indépendamment du placement. Toutes les cartes d’un groupe de même rang sont récupérables.
+- Poser d’abord dans `currentPlay`. L’ancienne `previousDiscard` reste récupérable jusqu’à la pioche. Impossible de reprendre sa propre pose. La combinaison posée remplace l’ancienne à la fin du tour.
+- Une pioche du même rang qu’une carte posée ouvre un bonus de **6 secondes** : rajouter ou garder. Cela marche aussi après une suite. Le bonus est ajouté à droite ; après une suite, il est récupérable uniquement si son rang correspond à une extrémité logique de la suite originale. Sans réponse, la carte est conservée.
+- Yaniv est annoncé au début de son tour, main ≤7. Une main adverse inférieure **ou égale** provoque un Assaf : l’appelant prend sa main +30. Sinon il prend zéro.
+- Les autres joueurs ajoutent leur main. Le Joker détenu par un adversaire vaut +10 **seulement lors d’un Yaniv réussi** ; il reste à zéro lors d’un Assaf.
+- Objectif : le moins de points possible. Après ajout des points de manche, 50 exactement → 0 ; 100 exactement → 50. Une seule réduction, sans cascade. Aucun effet si le palier est dépassé.
+- À 200 ou plus : élimination. Dernier actif : victoire. Cas limite d’élimination simultanée de tous : le plus petit score final gagne, départagé par l’ordre des sièges en cas d’égalité.
+- La défausse retirée est recyclée sans créer de cartes. En dernier recours, lorsque la réserve et les anciennes piles sont vides, la défausse disponible est remélangée pour la pioche ; les mains et la pose du tour ne sont jamais réintroduites.
+- Après **90 secondes d’inactivité par phase**, le serveur joue une carte puis pioche, ou annonce Yaniv si la main le permet. Cette action ne crée pas de joueur artificiel.
+
+## 3D et audio
+
+Le café, les portes, les chaises, la table, la nappe, les plantes, le scooter, la théière et les accessoires sont des géométries 3D. Les personnages utilisent un vrai maillage humanoïde GLB avec squelette et six déclinaisons vestimentaires. Respiration par `AnimationMixer`, mouvements des bras liés aux événements réseau, regards, clignements, arrivée et réactions de fin de manche. Les cartes adverses restent de dos avant la révélation.
+
+Rendu **stylisé**, avec matériaux PBR, ombres, éclairage chaud et tone mapping. Les personnages partagent le modèle de base Quaternius ; ce ne sont pas six sculptures photoréalistes distinctes ni des animations de motion capture. Les textures procédurales sont originales. Les objets statiques sont regroupés et le feuillage utilise l’instancing.
+
+Qualité Bas/Moyen/Élevé : ratio de pixels, ombres et résolution de shadow map. Le mode Bas désactive les ombres. La cible 60 FPS dépend du GPU et n’a pas été certifiée sur une gamme de machines physiques.
+
+Sons de cartes, oiseaux, rue et ambiance synthétisés via Web Audio. Mixage séparé : général, café, voix, rue, oiseaux, cartes, annonces. Les phrases utilisent uniquement une **voix française installée localement**, si disponible ; le jeu reste jouable sans elle. Pas de fichier audio protégé ni de service vocal distant obligatoire.
+
+## Validation
+
+```sh
+npm test
+npm run build
+npm start
+```
+
+`npm test` couvre **57 tests** : toutes les règles demandées, entrées invalides, confidentialité réseau, salons jusqu’à huit joueurs, reprise de session et parties simulées complètes pour chaque effectif de 2 à 8. Le lanceur reste dans un seul processus pour fonctionner aussi sur les postes Windows restreints.
+
+Pour les tests UI automatisés sur deux moteurs :
+
+```sh
+npx playwright install chromium firefox
+npm run test:e2e
+```
+
+Ils démarrent leur propre serveur sur un port libre. Les captures sont écrites dans `test-results/`. Les variables facultatives `CHROMIUM_EXECUTABLE_PATH` et `FIREFOX_EXECUTABLE_PATH` permettent d’utiliser des navigateurs déjà installés. Le workflow GitHub Actions fourni exécute ces commandes sur Linux après publication du repository.
+
+Voir **[VALIDATION.md](VALIDATION.md)** pour les résultats effectivement observés et la limite de l’environnement de test.
+
+## Licences
+
+Voir **[ASSETS_LICENSES.md](ASSETS_LICENSES.md)**. Les GLB nécessaires sont inclus ; aucun téléchargement n’est effectué au lancement. Les bibliothèques conservent leurs licences dans les paquets npm.
+
+### Suites avec Joker
+Le serveur privilégie une interprétation où les Jokers sont internes. En cas d'ambiguïté restante, il choisit le départ le plus bas (As, 2… Roi). Ainsi 2/Joker/3 est interprété As/2/3 ; le Joker et le 3 sont récupérables. L'ordre visuel ne modifie jamais cette décision.
+
+### Apparence
+Les cartes sont soutenues par les deux mains au repos. Focus penche le buste et relève les cartes ; Chicha incline le buste vers l'arrière, avec un tuyau qui suit la main. Réglages → Ambiance visuelle : Jour / Nuit, mémorisé sur l'appareil.
+

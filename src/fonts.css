@@ -1,0 +1,19 @@
+/* System fonts keep the game independent of third-party font services. */
+@font-face {
+  font-family: "Cafe Sans";
+  src: local("Segoe UI");
+  font-style: normal;
+  font-weight: 100 900;
+}
+@font-face {
+  font-family: "Cafe Serif";
+  src: local("Georgia");
+  font-style: normal;
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Cafe Serif";
+  src: local("Georgia Italic");
+  font-style: italic;
+  font-weight: 400;
+}
