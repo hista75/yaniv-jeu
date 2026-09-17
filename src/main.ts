@@ -2,7 +2,7 @@ import { io } from "socket.io-client";
 import { CafeScene } from "./scene";
 import { CafeAudio } from "./audio";
 import { skinPortraits } from "./avatar";
-import { cardTexture } from "./cards";
+import { cardTexture, backTexture, setCardTheme } from "./cards";
 import { sum, rankValue, type State, type Card } from "./types";
 import "./style.css";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -17,6 +17,46 @@ const escape = (text: string) =>
   );
 const socket = io({ autoConnect: false });
 const audio = new CafeAudio();
+type Reward = { id: string; type: string; name: string; wins: number };
+type Profile = {
+  wins: number;
+  equipped: Record<string, string>;
+  rewards: Reward[];
+};
+let profile: Profile | null = null;
+let profileRequest: Promise<void> | null = null;
+async function ensureProfile() {
+  if (profileRequest) return profileRequest;
+  profileRequest = (async () => {
+    const token = localStorage.getItem("yaniv-profile");
+    let r = await socket.timeout(6000).emitWithAck("profile", { token });
+    if (!r.ok && token) {
+      toast(
+        "Ancien profil indisponible sur ce serveur : un nouveau profil est créé.",
+      );
+      r = await socket.timeout(6000).emitWithAck("profile", {});
+    }
+    if (!r.ok) throw new Error(r.error);
+    if (r.token) localStorage.setItem("yaniv-profile", r.token);
+    applyProfile(r);
+  })()
+    .catch((e) => {
+      toast(e.message);
+    })
+    .finally(() => {
+      profileRequest = null;
+    });
+  return profileRequest;
+}
+function applyProfile(p: Profile) {
+  const before = profile?.wins;
+  profile = p;
+  setCardTheme(p.equipped.face);
+  if (before !== undefined && p.wins > before)
+    toast(`Victoire ! ${p.wins} victoire(s) — découvre tes récompenses.`);
+  renderWardrobe();
+}
+
 let scene: CafeScene;
 let state: State | null = null,
   selected: string[] = [],
@@ -136,10 +176,12 @@ async function enter(create: boolean) {
     $<HTMLInputElement>("nickname").reportValidity();
     return;
   }
+  await ensureProfile();
   await audio.start();
   localStorage.setItem("yaniv-name", name);
   const result = await send("enter", {
     create,
+    profileToken: localStorage.getItem("yaniv-profile"),
     name,
     skin,
     pose,
@@ -155,7 +197,9 @@ $("entry-form").addEventListener("submit", (e) => {
   enter(true);
 });
 $("join").onclick = () => enter(false);
+socket.on("profile", applyProfile);
 socket.on("connect", async () => {
+  await ensureProfile();
   $("connection").textContent = "EN LIGNE";
   $("connection").classList.add("online");
   const token = sessionStorage.getItem("yaniv-session");
@@ -466,6 +510,13 @@ function renderResult() {
   $("result").classList.toggle("assaf", !!r?.assaf);
   $("result").innerHTML =
     `<div class="eyebrow">${s.phase === "GAME_END" ? "LE DERNIER SURVIVANT" : `MANCHE ${s.round} · LES MAINS SONT RÉVÉLÉES`}</div><h2>${title}</h2>${r ? `<p>${escape(s.players.find((p) => p.id === r.callerId)?.name || "Le joueur")} annonce ${r.callerTotal} points.${r.assaf ? " Une main inférieure ou égale : +30 de pénalité." : " Yaniv réussi : zéro point !"}</p><div class="score-rows">${r.rows.map((row) => `<div class="score-row"><strong>${escape(row.name)}</strong><span>${row.hand.map((c) => (c.rank === "JOKER" ? "Joker" : c.rank + c.suit)).join(" + ")} <b>= ${row.comparison}</b></span><em>+${row.points}${row.reduction ? `<small>Palier exact : ${row.subtotal} → ${row.total}</small>` : ""}</em><strong>${row.total}<small>${row.eliminated ? "ÉLIMINÉ" : "TOTAL"}</small></strong></div>`).join("")}</div>` : ""}${s.phase === "YANIV_REVEAL" ? '<p class="muted">Les cartes se posent…</p>' : s.phase === "ROUND_END" ? `<button id="next-round" class="primary" ${s.hostId !== s.me ? "disabled" : ""}>Manche suivante →</button>${s.hostId !== s.me ? "<small>L’hôte lance la prochaine manche.</small>" : ""}` : '<p class="final-star">✦ ♠ ✦</p><button id="back-menu" class="primary">Retour à l’accueil</button>'}`;
+  if (r?.assaf && r.assafIds.includes(s.me)) {
+    const button = document.createElement("button");
+    button.textContent = "😏 Chambrer après cet Assaf";
+    button.className = "secondary";
+    button.onclick = () => $<HTMLDialogElement>("taunt-dialog").showModal();
+    $("result").append(button);
+  }
   const next = document.getElementById("next-round");
   if (next) next.onclick = () => send("next");
   const back = document.getElementById("back-menu");
@@ -550,4 +601,111 @@ $("time-of-day").onchange = () => {
   const mode = $<HTMLSelectElement>("time-of-day").value;
   localStorage.setItem("yaniv-time", mode);
   scene.setTimeOfDay(mode);
+};
+
+// Optional AI writes a draft only; the player explicitly sends the edited message.
+document.body.insertAdjacentHTML(
+  "beforeend",
+  `
+<dialog id="wardrobe-dialog"><button class="close-dialog" id="close-wardrobe" aria-label="Fermer le vestiaire">×</button><div class="eyebrow">LES HABITUÉS DU CAFÉ</div><h2>Ton vestiaire.</h2><p id="wins-count"></p><p class="muted">Les victoires de parties complètes débloquent les récompenses. Équipe-les avant de rejoindre une table.</p><div id="rewards-grid"></div><p class="muted">Profil sauvegardé sur ce navigateur. Ne supprime pas ses données pour conserver ton accès.</p></dialog>
+<dialog id="taunt-dialog"><button class="close-dialog" id="close-taunt" aria-label="Fermer la vanne">×</button><div class="eyebrow">BIEN ESSAYÉ !</div><h2>La vanne d’Assaf.</h2><label>Une idée pour l’IA ?<input id="taunt-idea" maxlength="120" placeholder="Ex. son bluff, le café, les +30…"></label><button id="generate-taunt" class="secondary">Proposer une vanne avec l’IA</button><p id="taunt-status" role="status"></p><label>Ton message, modifiable<textarea id="taunt-draft" maxlength="180" rows="3" placeholder="Écris ta vanne ici…"></textarea></label><button id="send-taunt" class="primary">Envoyer à la table</button></dialog>`,
+);
+const wardrobeButton = document.createElement("button");
+wardrobeButton.id = "wardrobe-button";
+wardrobeButton.className = "icon-btn";
+wardrobeButton.textContent = "✦ Vestiaire";
+$("settings-btn").after(wardrobeButton);
+wardrobeButton.onclick = () => {
+  renderWardrobe();
+  $<HTMLDialogElement>("wardrobe-dialog").showModal();
+};
+$("close-wardrobe").onclick = () =>
+  $<HTMLDialogElement>("wardrobe-dialog").close();
+$("close-taunt").onclick = () => $<HTMLDialogElement>("taunt-dialog").close();
+function renderWardrobe() {
+  if (!document.getElementById("rewards-grid")) return;
+  $("wins-count").textContent = profile
+    ? `${profile.wins} victoire${profile.wins > 1 ? "s" : ""}`
+    : "Connexion au profil…";
+  if (!profile) return;
+  const defaults = [
+    { id: "classic", type: "face", name: "Figures classiques", wins: 0 },
+    { id: "default", type: "skin", name: "Skin choisi au menu", wins: 0 },
+    { id: "default", type: "pose", name: "Pose choisie au menu", wins: 0 },
+  ];
+  $("rewards-grid").replaceChildren();
+  for (const r of [...defaults, ...profile.rewards]) {
+    const b = document.createElement("button");
+    b.className = "reward";
+    const unlocked = profile.wins >= r.wins,
+      equipped = profile.equipped[r.type] === r.id;
+    b.disabled = !unlocked || !!state;
+    b.classList.toggle("equipped", equipped);
+    if (r.type === "back" || r.type === "face") {
+      const img = document.createElement("img");
+      img.alt = "";
+      const tex =
+        r.type === "back"
+          ? backTexture(r.id)
+          : cardTexture({ id: "preview", rank: "R", suit: "♥", pack: 0 }, r.id);
+      img.src = (tex.image as HTMLCanvasElement).toDataURL();
+      b.append(img);
+      if (["aurora", "solar"].includes(r.id))
+        b.classList.add("animated-reward");
+    }
+    const label = document.createElement("strong");
+    label.textContent = r.name;
+    const detail = document.createElement("small");
+    detail.textContent = equipped
+      ? "✓ Équipé"
+      : unlocked
+        ? "Équiper"
+        : `🔒 ${r.wins} victoires`;
+    b.append(label, detail);
+    $("rewards-grid").append(b);
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const res = await socket
+          .timeout(6000)
+          .emitWithAck("equip", {
+            token: localStorage.getItem("yaniv-profile"),
+            type: r.type,
+            id: r.id,
+          });
+        if (!res.ok) throw new Error(res.error);
+        applyProfile(res);
+      } catch (e) {
+        toast((e as Error).message);
+        renderWardrobe();
+      }
+    };
+  }
+}
+$("generate-taunt").onclick = async () => {
+  const button = $<HTMLButtonElement>("generate-taunt");
+  button.disabled = true;
+  $("taunt-status").textContent = "La vanne se prépare…";
+  try {
+    const r = await socket
+      .timeout(16000)
+      .emitWithAck("taunt", { idea: $<HTMLInputElement>("taunt-idea").value });
+    if (!r.ok) throw new Error(r.error);
+    $<HTMLTextAreaElement>("taunt-draft").value = r.text;
+    $("taunt-status").textContent =
+      "Proposition IA : relis, modifie et envoie si elle te plaît.";
+  } catch (e) {
+    $("taunt-status").textContent = (e as Error).message;
+  } finally {
+    button.disabled = false;
+  }
+};
+$("send-taunt").onclick = async () => {
+  const text = $<HTMLTextAreaElement>("taunt-draft").value.trim();
+  if (!text) return;
+  const result = await send("chat", { text });
+  if (result) {
+    $<HTMLDialogElement>("taunt-dialog").close();
+    $<HTMLTextAreaElement>("taunt-draft").value = "";
+  }
 };

@@ -9,6 +9,8 @@ export type Player = {
   eliminated: boolean;
   connected: boolean;
   seat?: number;
+  back?: string;
+  face?: string;
 };
 export type GameEvent = {
   seq: number;

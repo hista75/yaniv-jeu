@@ -1,4 +1,6 @@
 import express from "express";
+import { Profiles } from "./progression.js";
+import { generateTaunt } from "./taunts.js";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -19,7 +21,14 @@ import {
 } from "./game.js";
 import { check } from "./rules.js";
 
-export function makeServer() {
+export function makeServer({
+  profileFile = process.env.DATA_DIR
+    ? path.join(process.env.DATA_DIR, "profiles.json")
+    : null,
+  tauntGenerator = generateTaunt,
+} = {}) {
+  const profiles = new Profiles(profileFile);
+  let aiActive = 0;
   const app = express();
   const http = createServer(app);
   const io = new Server(http, { maxHttpBufferSize: 8192, serveClient: false });
@@ -34,8 +43,8 @@ export function makeServer() {
   app.get("/version", (_, res) =>
     res.json({
       name: "Yaniv Café",
-      version: "6.1.0",
-      build: process.env.RENDER_GIT_COMMIT?.slice(0, 12) || "6.1.0-local",
+      version: "6.2.0",
+      build: process.env.RENDER_GIT_COMMIT?.slice(0, 12) || "6.2.0-local",
       rules: "djerbien-2026-09",
       uptime: Math.floor(process.uptime()),
     }),
@@ -51,6 +60,27 @@ export function makeServer() {
   );
   app.get("*", (_, res) => res.sendFile(path.join(dist, "index.html")));
   function broadcast(g) {
+    if (
+      g.phase === "GAME_END" &&
+      g.lastEvent?.type === "win" &&
+      g.result &&
+      !g.rewardGranted
+    ) {
+      const winner = g.players.find((p) => p.id === g.winnerId);
+      // Only completed games count, never a lobby or a disconnect-only victory.
+      if (winner && g.result.rows.some((r) => r.eliminated)) {
+        const won = profiles.award(winner.profileToken, g.gameId);
+        g.rewardGranted = true;
+        if (won) {
+          const ws = sessions.get(winner.token);
+          if (ws?.socketId)
+            io.to(ws.socketId).emit(
+              "profile",
+              profiles.view(winner.profileToken),
+            );
+        }
+      }
+    }
     g.revision++;
     for (const p of g.players) {
       const s = sessions.get(p.token);
@@ -70,7 +100,7 @@ export function makeServer() {
     let session = null;
     let hits = [];
     function action(name, handler) {
-      socket.on(name, (data, ack) => {
+      socket.on(name, async (data, ack) => {
         try {
           hits = hits.filter((t) => Date.now() - t < 1000);
           check(
@@ -78,7 +108,7 @@ export function makeServer() {
             "Trop de demandes. Réessaie dans une seconde.",
           );
           hits.push(Date.now());
-          const result = handler(data ?? {});
+          const result = await handler(data ?? {});
           if (typeof ack === "function") ack({ ok: true, ...result });
         } catch (e) {
           if (typeof ack === "function") ack({ ok: false, error: e.message });
@@ -92,6 +122,55 @@ export function makeServer() {
       check(g, "Salon expiré.");
       return g;
     }
+    action("profile", (data) => {
+      if (data.token) {
+        check(profiles.get(data.token), "Profil introuvable.");
+        return profiles.view(data.token);
+      }
+      return profiles.create();
+    });
+    action("equip", (data) => profiles.equip(data.token, data.type, data.id));
+    action("taunt", async (data) => {
+      const g = game();
+      check(
+        g.result?.assaf && g.result.assafIds.includes(session.playerId),
+        "Les vannes Assaf sont disponibles après ton contre.",
+      );
+      check(
+        ["YANIV_REVEAL", "ROUND_END", "GAME_END"].includes(g.phase),
+        "Cet Assaf est terminé.",
+      );
+      check(
+        typeof data.idea === "string" && data.idea.length <= 120,
+        "Thème trop long.",
+      );
+      check(
+        Date.now() - (session.lastTaunt || 0) > 15000 &&
+          (session.tauntRound !== g.round || (session.tauntCount || 0) < 3),
+        "Maximum trois propositions par Assaf, espacées de 15 secondes.",
+      );
+      check(
+        aiActive < 3,
+        "Le comptoir prépare déjà des vannes, réessaie bientôt.",
+      );
+      if (session.tauntRound !== g.round) {
+        session.tauntRound = g.round;
+        session.tauntCount = 0;
+      }
+      session.lastTaunt = Date.now();
+      session.tauntCount++;
+      aiActive++;
+      try {
+        return {
+          text: await tauntGenerator({
+            idea: data.idea,
+            callerTotal: g.result.callerTotal,
+          }),
+        };
+      } finally {
+        aiActive--;
+      }
+    });
     action("enter", (data) => {
       check(!session, "Tu es déjà dans un salon.");
       check(
@@ -127,7 +206,24 @@ export function makeServer() {
       }
       const token = randomBytes(32).toString("hex"),
         id = randomUUID();
-      addPlayer(g, { id, name, skin, pose, token });
+      const profile = profiles.get(data.profileToken);
+      const equipped = profile?.equipped || {
+        back: "classic",
+        face: "classic",
+        skin: "default",
+        pose: "default",
+      };
+      addPlayer(g, {
+        id,
+        name,
+        skin: equipped.skin !== "default" ? equipped.skin : skin,
+        pose: equipped.pose !== "default" ? equipped.pose : pose,
+        token,
+        profileToken: profile ? data.profileToken : undefined,
+        back: equipped.back,
+        face: equipped.face,
+      });
+      if (!g.gameId) g.gameId = randomUUID();
       rooms.set(g.code, g);
       session = {
         token,
@@ -247,10 +343,12 @@ export function makeServer() {
   };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const server = makeServer();
+  const server = makeServer({
+    profileFile: path.join(process.env.DATA_DIR || "data", "profiles.json"),
+  });
   const port = Number(process.env.PORT) || 3000;
   server.http.listen(port, "0.0.0.0", () =>
-    console.log(`Yaniv Café 6.1.0 — http://localhost:${port}`),
+    console.log(`Yaniv Café 6.2.0 — http://localhost:${port}`),
   );
   for (const signal of ["SIGTERM", "SIGINT"])
     process.on(signal, async () => {

@@ -93,7 +93,7 @@ test("Socket.IO : deux joueurs, secret des mains, pose/pioche, chat, reprise, d�
   assert.equal(resume.state.players.length, 1);
   assert.equal(resume.state.phase, "GAME_END");
   const version = await (await fetch(f.url + "/version")).json();
-  assert.equal(version.version, "6.1.0");
+  assert.equal(version.version, "6.2.0");
 });
 test("Socket.IO : capacité 8, entrées en double et payloads malformés refusés", async (t) => {
   const f = await fixture(t),
@@ -145,3 +145,71 @@ test("Socket.IO : révélation, scores et manche suivante synchronisés", async 
   assert.equal(a.state.result, null);
 });
 
+import { settle } from "../server/game.js";
+test("Socket.IO : victoire serveur débloque le vestiaire, aucune victoire client acceptée", async (t) => {
+  const f = await fixture(t),
+    a = await f.client(),
+    b = await f.client();
+  const profile = await a.send("profile");
+  assert.ok(profile.token);
+  assert.equal(
+    (
+      await a.send("equip", {
+        token: profile.token,
+        type: "back",
+        id: "aurora",
+      })
+    ).ok,
+    false,
+  );
+  const entered = await a.send("enter", {
+    create: true,
+    name: "Alice",
+    profileToken: profile.token,
+  });
+  await b.send("enter", { code: entered.code, name: "Bob" });
+  await a.send("start");
+  const g = f.server.rooms.get(entered.code);
+  g.players[0].hand = [{ id: "a", rank: "A", suit: "♠", pack: 0 }];
+  g.players[1].hand = [{ id: "b", rank: "2", suit: "♠", pack: 0 }];
+  g.players[1].score = 198;
+  assert.ok((await a.send("yaniv")).ok);
+  g.deadline = Date.now() - 1;
+  await new Promise((resolve) =>
+    a.socket.on("state", (s) => {
+      if (s.phase === "GAME_END") resolve();
+    }),
+  );
+  const updated = await a.send("profile", { token: profile.token, wins: 999 });
+  assert.equal(updated.wins, 1);
+  assert.ok(
+    (
+      await a.send("equip", {
+        token: profile.token,
+        type: "back",
+        id: "mosaic",
+      })
+    ).ok,
+  );
+  assert.equal((await a.send("profile", { token: profile.token })).wins, 1);
+  assert.equal(JSON.stringify(b.state).includes(profile.token), false);
+});
+test("Socket.IO : vanne refusée sans Assaf et erreur sans clé", async (t) => {
+  const f = await fixture(t),
+    a = await f.client(),
+    b = await f.client();
+  assert.equal((await a.send("taunt", { idea: "café" })).ok, false);
+  const e = await a.send("enter", { create: true, name: "A" });
+  await b.send("enter", { code: e.code, name: "B" });
+  await a.send("start");
+  assert.equal((await b.send("taunt", { idea: "café" })).ok, false);
+  const g = f.server.rooms.get(e.code);
+  g.players[0].hand = [{ id: "a", rank: "3", suit: "♠", pack: 0 }];
+  g.players[1].hand = [{ id: "b", rank: "2", suit: "♠", pack: 0 }];
+  await a.send("yaniv");
+  assert.equal((await a.send("taunt", { idea: "café" })).ok, false);
+  const response = await b.send("taunt", { idea: "café" });
+  assert.equal(response.ok, false);
+  assert.match(response.error, /non configurée/);
+  assert.equal(g.chat.length, 0);
+});

@@ -1754,3 +1754,93 @@ dialog::backdrop {
     margin-right: 2px;
   }
 }
+#wardrobe-dialog {
+  width: min(780px, 94vw);
+  max-height: 88vh;
+  overflow: auto;
+}
+#rewards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.reward {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 155px;
+  padding: 12px;
+  border: 1px solid #bfa77444;
+  border-radius: 12px;
+  background: #163c36;
+  color: #efe4c8;
+  overflow: hidden;
+}
+.reward img {
+  width: 54px;
+  height: 76px;
+  border-radius: 5px;
+}
+.reward strong {
+  font-size: 12px;
+}
+.reward small {
+  font-size: 10px;
+}
+.reward.equipped {
+  border-color: #ebc476;
+  background: #305648;
+}
+.reward:disabled {
+  opacity: 0.65;
+}
+.animated-reward::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background: linear-gradient(
+    110deg,
+    transparent 42%,
+    #ffe3a544 50%,
+    transparent 58%
+  );
+  animation: reward-shine 4s linear infinite;
+  pointer-events: none;
+}
+@keyframes reward-shine {
+  from {
+    transform: translateX(-70%);
+  }
+  to {
+    transform: translateX(70%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animated-reward::after {
+    animation: none;
+  }
+}
+#taunt-dialog label {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+#taunt-dialog textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  font: inherit;
+  background: #173c34;
+  color: #fff3d6;
+  border: 1px solid #bcaa7155;
+  border-radius: 8px;
+  resize: vertical;
+}
+#taunt-status {
+  font-size: 12px;
+  max-width: 440px;
+}

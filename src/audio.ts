@@ -13,6 +13,7 @@ export class CafeAudio {
   };
   timers: number[] = [];
   constructor() {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     try {
       Object.assign(
         this.volumes,
@@ -88,37 +89,12 @@ export class CafeAudio {
     this.tone("birds", 2900, 0.13, 0.1, 0.18);
     this.tone("birds", 2400, 0.1, 0.08, 0.35);
   }
-  speak(text: string, category = "announcements") {
-    if (
-      !("speechSynthesis" in window) ||
-      this.volumes.master * this.volumes[category] < 0.01
-    )
-      return;
-    const voice = speechSynthesis
-      .getVoices()
-      .find((v) => v.localService && v.lang.startsWith("fr"));
-    // Use only an installed local voice; audio must not depend on a remote service.
-    if (!voice || speechSynthesis.speaking) return;
-    const speech = new SpeechSynthesisUtterance(text);
-    speech.voice = voice;
-    speech.lang = voice.lang;
-    speech.volume = this.volumes.master * this.volumes[category];
-    speech.rate = 0.96;
-    speechSynthesis.speak(speech);
-  }
   event(type: string) {
     if (["play", "draw", "bonus", "deal"].includes(type)) {
       this.tone("cards", type === "draw" ? 470 : 260, 0.08, 0.35);
       this.tone("cards", 1800, 0.025, 0.12, 0.02);
     }
     if (["yaniv", "assaf", "win"].includes(type)) {
-      this.speak(
-        type === "yaniv"
-          ? "Yaniv !"
-          : type === "assaf"
-            ? "Assaf ! Bien essayé !"
-            : "La table a son champion !",
-      );
       const notes = type === "assaf" ? [440, 330, 210] : [392, 494, 587, 784];
       notes.forEach((n, i) =>
         this.tone("announcements", n, 0.3, 0.22, i * 0.14),

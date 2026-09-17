@@ -2,7 +2,7 @@ import * as T from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { Avatar, loadAvatars } from "./avatar";
-import { canvasTexture, cardMesh } from "./cards";
+import { canvasTexture, cardMesh, animateCardBacks } from "./cards";
 import type { State, Card } from "./types";
 const V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z);
 const mat = (color: T.ColorRepresentation, roughness = 0.85, metalness = 0) =>
@@ -892,7 +892,7 @@ export class CafeScene {
   hookah(root: T.Object3D) {
     const m = mat("#a8a897", 0.24, 0.85);
     const g = new T.Group();
-    g.position.set(0.39, 0, 0.1);
+    g.position.set(-0.39, 0, 0.1);
     root.add(g);
     mesh(
       new T.LatheGeometry(
@@ -1121,6 +1121,8 @@ export class CafeScene {
           // Opponent deck draws remain face-down throughout the gesture.
           const moving = cardMesh(
             drawing && event.playerId !== state.me ? undefined : c,
+            av.player.back,
+            av.player.face,
           );
           this.scene.add(moving);
           const oldPile = previousState?.previousDiscard.cards || [];
@@ -1137,7 +1139,7 @@ export class CafeScene {
           this.gestures.push({
             mesh: moving,
             avatar: av,
-            start: performance.now(),
+            start: av.nextActionAt + av.actionDelay * 1000,
             kind: event.type,
             from,
             to:
@@ -1269,6 +1271,7 @@ export class CafeScene {
     const now = performance.now(),
       dt = Math.min((now - this.lastFrame) / 1000, 0.05);
     this.lastFrame = now;
+    animateCardBacks(now / 1000);
     const reveal =
       this.state?.phase === "YANIV_REVEAL" ||
       this.state?.phase === "ROUND_END" ||
@@ -1290,7 +1293,11 @@ export class CafeScene {
       const hose = av.root.userData.hookahHose as T.Mesh | undefined;
       if (hose && now - av.root.userData.hoseAt > 80) {
         av.root.userData.hoseAt = now;
-        const end = hose.parent!.worldToLocal(av.grip.getWorldPosition(V()));
+        const end = hose.parent!.worldToLocal(
+          av.hoseHeld
+            ? av.grip.getWorldPosition(V())
+            : av.root.localToWorld(V(-0.31, 0.76, 0.24)),
+        );
         const curve = new T.CatmullRomCurve3([
           V(0, 0.25, 0),
           V(0.25, 0.16, 0.22),
@@ -1311,6 +1318,17 @@ export class CafeScene {
     }
     this.gestures = this.gestures.filter((g) => {
       const t = (now - g.start) / 1000;
+      if (t < 0) {
+        g.mesh.position.copy(
+          g.kind === "draw" ? g.from : g.avatar.cards.getWorldPosition(V()),
+        );
+        g.mesh.quaternion.copy(
+          g.kind === "draw"
+            ? g.rotation
+            : g.avatar.cards.getWorldQuaternion(new T.Quaternion()),
+        );
+        return true;
+      }
       const wrist = g.avatar.grip.getWorldPosition(V());
       const q = g.avatar.grip.getWorldQuaternion(new T.Quaternion());
       if (g.kind === "draw") {

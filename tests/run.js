@@ -2,3 +2,4 @@
 import "./rules.test.js";
 import "./socket.test.js";
 import "./simulation.test.js";
+import "./progression.test.js";

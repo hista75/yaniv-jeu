@@ -1,5 +1,9 @@
 import * as T from "three";
 import type { Card } from "./types";
+let faceTheme = "classic";
+export function setCardTheme(theme: string) {
+  faceTheme = theme;
+}
 const cache = new Map<string, T.CanvasTexture>();
 export function canvasTexture(
   w: number,
@@ -15,18 +19,30 @@ export function canvasTexture(
   t.anisotropy = 4;
   return t;
 }
-export function cardTexture(card?: Card) {
-  const key = card ? card.rank + card.suit : "back";
+export function cardTexture(card?: Card, theme = faceTheme) {
+  const key = card ? theme + card.rank + card.suit : "back";
   if (cache.has(key)) return cache.get(key)!;
   const t = canvasTexture(512, 720, (c) => {
     c.scale(2, 2);
     c.fillStyle = "#eee7d5";
     c.fillRect(0, 0, 256, 360);
-    c.fillStyle = card ? "#fffdf3" : "#153d66";
+    c.fillStyle = card
+      ? theme === "ivory"
+        ? "#edf7ff"
+        : theme === "gold"
+          ? "#fff1ca"
+          : "#fffdf3"
+      : "#153d66";
     c.beginPath();
     c.roundRect(8, 8, 240, 344, 14);
     c.fill();
-    c.strokeStyle = card ? "#d5c7a5" : "#c8b27a";
+    c.strokeStyle = card
+      ? theme === "gold"
+        ? "#b48329"
+        : theme === "ivory"
+          ? "#4376a0"
+          : "#d5c7a5"
+      : "#c8b27a";
     c.lineWidth = 0.8;
     c.beginPath();
     c.roundRect(13, 13, 230, 334, 11);
@@ -205,20 +221,93 @@ const uv = geo.getAttribute("uv");
 const pos = geo.getAttribute("position");
 for (let i = 0; i < uv.count; i++)
   uv.setXY(i, (pos.getX(i) + w) / (2 * w), (pos.getY(i) + h) / (2 * h));
-const backMaterial = new T.MeshStandardMaterial({
-  map: cardTexture(),
-  roughness: 0.82,
-});
+const backMaterials = new Map<string, T.MeshStandardMaterial>();
+const clockUniform = { value: 0 };
+export function animateCardBacks(time: number) {
+  clockUniform.value = time;
+}
+export function backTexture(style = "classic") {
+  if (style === "classic") return cardTexture();
+  const key = "back-" + style;
+  if (cache.has(key)) return cache.get(key)!;
+  const texture = canvasTexture(512, 720, (c) => {
+    c.scale(2, 2);
+    c.fillStyle = "#eee4c9";
+    c.fillRect(0, 0, 256, 360);
+    const gold = style === "solar";
+    c.fillStyle = gold ? "#352211" : style === "aurora" ? "#142849" : "#075b70";
+    c.fillRect(9, 9, 238, 342);
+    c.strokeStyle = gold ? "#eac86d" : "#8eddd7";
+    c.lineWidth = 1.5;
+    c.strokeRect(16, 16, 224, 328);
+    for (let y = 35; y < 340; y += 32)
+      for (let x = 32; x < 236; x += 32) {
+        c.save();
+        c.translate(x, y);
+        c.rotate(Math.PI / 4);
+        c.strokeRect(-10, -10, 20, 20);
+        c.rotate(Math.PI / 4);
+        c.strokeRect(-9, -9, 18, 18);
+        c.restore();
+      }
+    c.fillStyle = gold ? "#352211" : "#123749";
+    c.beginPath();
+    c.ellipse(128, 180, 57, 72, 0, 0, 7);
+    c.fill();
+    c.stroke();
+    c.fillStyle = gold ? "#f8d979" : "#d6f0e3";
+    c.textAlign = "center";
+    c.font = "52px Georgia";
+    c.fillText(gold ? "☀" : "✦", 128, 187);
+    c.font = "bold 16px Georgia";
+    c.fillText("DJERBA", 128, 213);
+    c.font = "10px Georgia";
+    c.fillText("YANIV · CAFÉ", 128, 233);
+  });
+  cache.set(key, texture);
+  return texture;
+}
+function backMaterialFor(style: string) {
+  if (backMaterials.has(style)) return backMaterials.get(style)!;
+  const m = new T.MeshStandardMaterial({
+    map: backTexture(style),
+    roughness: 0.7,
+  });
+  if (["aurora", "solar"].includes(style)) {
+    m.onBeforeCompile = (shader) => {
+      shader.uniforms.backTime = clockUniform;
+      shader.fragmentShader =
+        "uniform float backTime;\n" + shader.fragmentShader;
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+    float glow=pow(max(0.0,sin(vMapUv.y*15.0+vMapUv.x*8.0-backTime*1.4)),8.0);
+    diffuseColor.rgb += vec3(${style === "solar" ? ".36,.22,.055" : ".08,.22,.32"})*glow;`,
+      );
+    };
+    m.customProgramCacheKey = () => "animated-back-" + style;
+  }
+  backMaterials.set(style, m);
+  return m;
+}
 const faceMaterials = new Map<string, T.MeshStandardMaterial>();
-export function cardMesh(card?: Card) {
+export function cardMesh(
+  card?: Card,
+  backStyle = "classic",
+  theme = faceTheme,
+) {
+  const backMaterial = backMaterialFor(backStyle);
   const group = new T.Group();
   let mat = backMaterial;
   if (card) {
-    const key = card.rank + card.suit;
+    const key = theme + card.rank + card.suit;
     if (!faceMaterials.has(key))
       faceMaterials.set(
         key,
-        new T.MeshStandardMaterial({ map: cardTexture(card), roughness: 0.8 }),
+        new T.MeshStandardMaterial({
+          map: cardTexture(card, theme),
+          roughness: 0.8,
+        }),
       );
     mat = faceMaterials.get(key)!;
   }

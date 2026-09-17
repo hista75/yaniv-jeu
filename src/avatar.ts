@@ -105,6 +105,17 @@ export class Avatar {
   cards = new T.Group();
   grip = new T.Group();
   actionTarget?: T.Vector3;
+  nextActionAt = 0;
+  hoseHeld = true;
+  private actions: {
+    type: string;
+    target?: T.Vector3;
+    at: number;
+    end: number;
+  }[] = [];
+  get actionDelay() {
+    return this.player.pose === "chicha" ? 0.6 : 0.16;
+  }
   private wristHome = new Map<string, T.Quaternion>();
   private handKey = "";
   base = new Map<string, T.Quaternion>();
@@ -181,6 +192,15 @@ export class Avatar {
     });
     fabric.wrapS = fabric.wrapT = T.RepeatWrapping;
     fabric.repeat.set(4, 4);
+    let skinMaterial: T.MeshStandardMaterial | undefined;
+    this.body.traverse((o) => {
+      if (
+        o instanceof T.Mesh &&
+        !Array.isArray(o.material) &&
+        o.material.name === "MI_Superhero_Male"
+      )
+        skinMaterial = o.material as T.MeshStandardMaterial;
+    });
     this.body.traverse((o) => {
       if (o instanceof T.Mesh) {
         o.castShadow = true;
@@ -190,6 +210,32 @@ export class Avatar {
         const mat = orig.clone();
         const name = orig.name;
         if (name === "Shirt") {
+          // Loosen the actual skinned garment geometry instead of only painting skin.
+          o.geometry = o.geometry.clone();
+          const positions = o.geometry.getAttribute("position");
+          const normals = o.geometry.getAttribute("normal");
+          const used = new Set<number>(Array.from(o.geometry.index!.array));
+          for (const i of used) {
+            const x = positions.getX(i),
+              y = positions.getY(i),
+              z = positions.getZ(i);
+            const hem = T.MathUtils.smoothstep(y, 0.99, 1.045);
+            const neck = 1 - T.MathUtils.smoothstep(y, 1.44, 1.57);
+            const torso = 1 - T.MathUtils.smoothstep(Math.abs(x), 0.2, 0.33);
+            const loose =
+              (player.skin === "costaud" ? 0.024 : 0.044) * hem * neck;
+            const fold = Math.sin(x * 82 + y * 12) * 0.004 * hem * neck;
+            positions.setXYZ(
+              i,
+              x + normals.getX(i) * (loose * 0.7 + fold),
+              y,
+              z +
+                normals.getZ(i) * (loose + fold) +
+                Math.sign(z) * torso * loose * 0.4,
+            );
+          }
+          positions.needsUpdate = true;
+          o.geometry.computeVertexNormals();
           mat.map = fabric;
           mat.roughness = 0.96;
           mat.color.set(
@@ -201,6 +247,8 @@ export class Avatar {
                 nain: "#8e3530",
                 vieux: "#826b52",
                 bg: "#eee9da",
+                azur: "#75afb8",
+                sultan: "#dcc491",
               } as Record<string, string>
             )[player.skin] ||
               visitorColors[visitor] ||
@@ -289,6 +337,48 @@ export class Avatar {
           mat.color.lerp(new T.Color("#888b85"), 0.65);
         }
         o.material = mat;
+        if (
+          name === "Trousers" &&
+          skinMaterial &&
+          ["jeune", "costaud", "bg"].includes(player.skin)
+        ) {
+          o.geometry = o.geometry.clone();
+          const p = o.geometry.getAttribute("position"),
+            normal = o.geometry.getAttribute("normal");
+          const index = o.geometry.index!,
+            cloth: number[] = [],
+            skin: number[] = [];
+          for (let i = 0; i < index.count; i += 3) {
+            const tri = [index.getX(i), index.getX(i + 1), index.getX(i + 2)];
+            (tri.reduce((sum, j) => sum + p.getY(j), 0) / 3 < 0.58
+              ? skin
+              : cloth
+            ).push(...tri);
+          }
+          for (const i of new Set(cloth)) {
+            const loosen =
+              0.025 * T.MathUtils.smoothstep(p.getY(i), 0.58, 0.67);
+            p.setXYZ(
+              i,
+              p.getX(i) + normal.getX(i) * loosen,
+              p.getY(i),
+              p.getZ(i) + normal.getZ(i) * loosen,
+            );
+          }
+          o.geometry.setIndex([...cloth, ...skin]);
+          o.geometry.clearGroups();
+          o.geometry.addGroup(0, cloth.length, 0);
+          o.geometry.addGroup(cloth.length, skin.length, 1);
+          o.material = [mat, skinMaterial.clone()];
+          mat.color.set(
+            player.skin === "bg"
+              ? "#b5a17c"
+              : player.skin === "jeune"
+                ? "#526575"
+                : "#79775c",
+          );
+          o.geometry.computeVertexNormals();
+        }
         if (o instanceof T.SkinnedMesh && /Eyes/.test(o.name)) {
           o.geometry = o.geometry.clone();
           const pos = o.geometry.getAttribute("position");
@@ -386,7 +476,7 @@ export class Avatar {
       tassel.rotation.z = -0.3;
       accessories.add(tassel);
     };
-    if (["nain", "bg", "vieux"].includes(player.skin)) fez();
+    if (["nain", "bg", "vieux", "sultan"].includes(player.skin)) fez();
     if (player.skin === "classique") {
       const hat = new T.Mesh(
         new T.CylinderGeometry(0.092, 0.11, 0.11, 32),
@@ -401,7 +491,7 @@ export class Avatar {
       brim.position.y = 0.027;
       accessories.add(brim);
     }
-    if (["costaud", "nain", "bg"].includes(player.skin)) {
+    if (["costaud", "nain", "bg", "sultan"].includes(player.skin)) {
       for (const x of [-0.043, 0.043]) {
         const glass = new T.Mesh(
           new T.SphereGeometry(0.037, 16, 12),
@@ -457,7 +547,7 @@ export class Avatar {
           roughness: 1,
         }),
       );
-      logo.position.set(0, 1.29, 0.138);
+      logo.position.set(0, 1.29, 0.192);
       this.body.add(logo);
     }
     // Garment details are attached to the chest rig, so they follow breathing.
@@ -483,7 +573,11 @@ export class Avatar {
       );
       tailoring.add(line);
     };
-    if (["bg", "classique", "vieux", "nain"].includes(player.skin)) {
+    if (
+      ["bg", "classique", "vieux", "nain", "azur", "sultan"].includes(
+        player.skin,
+      )
+    ) {
       seam(
         [
           new T.Vector3(0, 1.04, 0.145),
@@ -546,7 +640,7 @@ export class Avatar {
         0.006,
       );
     }
-    if (["bg", "vieux", "nain"].includes(player.skin)) {
+    if (["bg", "vieux", "nain", "azur", "sultan"].includes(player.skin)) {
       // Embroidered geometric placket inspired by Tunisian jebba detailing.
       for (const side of [-1, 1]) {
         for (let i = 0; i < 8; i++) {
@@ -574,6 +668,7 @@ export class Avatar {
       }
     }
     this.body.updateMatrixWorld(true);
+    tailoring.position.z = 0.048;
     b("spine_02").attach(tailoring);
     const scale =
       visitor >= 0
@@ -593,11 +688,11 @@ export class Avatar {
       player.skin === "costaud" ? scale * 1.13 : scale,
     );
     this.body.position.y = 0.53 - 0.9491 * scale;
-    if (player.pose === "focus") {
-      b("spine_01").rotateX(0.3);
+    if (["focus", "confident"].includes(player.pose)) {
+      b("spine_01").rotateX(player.pose === "confident" ? -0.06 : 0.3);
     }
-    if (player.pose === "chicha") {
-      b("spine_01").rotateX(-0.18);
+    if (["chicha", "zen"].includes(player.pose)) {
+      b("spine_01").rotateX(player.pose === "zen" ? -0.27 : -0.18);
     }
     this.headHome = this.head.quaternion.clone();
     for (const name of [
@@ -695,7 +790,7 @@ export class Avatar {
     this.handKey = key;
     this.cards.clear();
     for (let i = 0; i < n; i++) {
-      const c = cardMesh(hand?.[i]);
+      const c = cardMesh(hand?.[i], this.player.back, this.player.face);
       c.userData.id = hand?.[i]?.id;
       const angle = (i - (n - 1) / 2) * -0.13;
       // Every card rotates around the same lower grip point.
@@ -710,11 +805,28 @@ export class Avatar {
     }
   }
   trigger(type: string, target?: T.Vector3) {
-    this.action = type;
-    this.actionTarget = target?.clone();
-    this.actionAt = performance.now();
+    const now = performance.now();
+    if (!target) {
+      this.actions = [];
+      this.action = type;
+      this.actionTarget = undefined;
+      this.actionAt = now;
+      return;
+    }
+    const at = Math.max(now, this.actions.at(-1)?.end || now);
+    const end = at + (this.player.pose === "chicha" ? 2.55 : 1.48) * 1000;
+    this.actions.push({ type, target: target.clone(), at, end });
+    this.nextActionAt = at;
   }
   update(dt: number, now: number, target?: T.Vector3) {
+    while (this.actions.length && now >= this.actions[0].end)
+      this.actions.shift();
+    const current = this.actions[0];
+    if (current && now >= current.at) {
+      this.action = current.type;
+      this.actionTarget = current.target;
+      this.actionAt = current.at;
+    } else if (this.actionTarget) this.actionTarget = undefined;
     this.mixer.update(dt);
     const blinkTime = ((now + this.joined) % 4700) / 1000;
     const blink = blinkTime < 0.18 ? Math.sin((blinkTime / 0.18) * Math.PI) : 0;
@@ -741,16 +853,20 @@ export class Avatar {
         b.rotateZ(reach * 0.5);
     }
     const hasCards = this.cards.children.length > 0;
-    if (hasCards) {
+    if (hasCards || this.player.pose === "chicha") {
       const pose = this.player.pose;
       const height =
         this.player.skin === "nain"
           ? 0.77
-          : pose === "focus"
-            ? 0.97
-            : pose === "chicha"
-              ? 0.82
-              : 0.89;
+          : pose === "confident"
+            ? 1.04
+            : pose === "zen"
+              ? 0.81
+              : pose === "focus"
+                ? 0.97
+                : pose === "chicha"
+                  ? 0.82
+                  : 0.89;
       const hold = this.root.localToWorld(
         new T.Vector3(0.045, height, pose === "focus" ? 0.43 : 0.34),
       );
@@ -771,13 +887,40 @@ export class Avatar {
           this.root.localToWorld(new T.Vector3(-0.1, height + 0.25, 0.18)),
           puff,
         );
+      this.hoseHeld = true;
+      if (pose === "chicha" && this.actionTarget) {
+        const dock = this.root.localToWorld(new T.Vector3(-0.31, 0.76, 0.24));
+        if (t < 0.32) support.lerp(dock, T.MathUtils.smoothstep(t, 0, 0.32));
+        else if (t < 0.6)
+          support
+            .copy(dock)
+            .lerp(
+              this.cards.getWorldPosition(new T.Vector3()),
+              T.MathUtils.smoothstep(t, 0.32, 0.6),
+            );
+        else if (t < 1.9)
+          support.copy(this.cards.getWorldPosition(new T.Vector3()));
+        else if (t < 2.2)
+          support
+            .copy(this.cards.getWorldPosition(new T.Vector3()))
+            .lerp(dock, T.MathUtils.smoothstep(t, 1.9, 2.2));
+        else
+          support
+            .copy(dock)
+            .lerp(
+              this.root.localToWorld(new T.Vector3(-0.1, height + 0.17, 0.2)),
+              T.MathUtils.smoothstep(t, 2.2, 2.55),
+            );
+        this.hoseHeld = t < 0.32 || t >= 2.2;
+      }
       this.aimSocket("r", this.grip, support);
     }
-    if (this.actionTarget && t >= 0 && t < 1.25) {
+    const actionTime = t - this.actionDelay;
+    if (this.actionTarget && actionTime >= 0 && actionTime < 1.25) {
       const weight =
-        t < 0.48
-          ? T.MathUtils.smoothstep(t, 0, 0.48)
-          : 1 - T.MathUtils.smoothstep(t, 0.64, 1.25);
+        actionTime < 0.48
+          ? T.MathUtils.smoothstep(actionTime, 0, 0.48)
+          : 1 - T.MathUtils.smoothstep(actionTime, 0.64, 1.25);
       const goal = this.grip
         .getWorldPosition(new T.Vector3())
         .lerp(this.actionTarget, weight);

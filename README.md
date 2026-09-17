@@ -1,4 +1,4 @@
-# Yaniv Café · 6.1.0
+# Yaniv Café · 6.2.0
 
 Jeu de Yaniv entre amis, de **2 à 8 joueurs**, dans un café djerbien en vraie 3D. Le serveur possède toutes les cartes, valide les actions et calcule les scores. Aucun bot ni joueur fictif n’est créé dans une partie.
 
@@ -51,7 +51,7 @@ src/main.ts           Menu, salon, sélection, chat, résultats, réglages
 src/scene.ts          Café 3D, caméra, sièges, cartes et déplacements
 src/avatar.ts         GLB skinné, poses, AnimationMixer, skins et regards
 src/cards.ts          Cartes et textures originales générées localement
-src/audio.ts          Mixeur Web Audio et voix locales facultatives
+src/audio.ts          Mixeur Web Audio sans annonces vocales
 public/assets/models/ Modèles GLB et licence Quaternius
 tests/                Règles, sockets réels et simulations complètes
 scripts/e2e.mjs       Contrôles UI Chromium + Firefox
@@ -93,7 +93,7 @@ Rendu **stylisé**, avec matériaux PBR, ombres, éclairage chaud et tone mappin
 
 Qualité Bas/Moyen/Élevé : ratio de pixels, ombres et résolution de shadow map. Le mode Bas désactive les ombres. La cible 60 FPS dépend du GPU et n’a pas été certifiée sur une gamme de machines physiques.
 
-Sons de cartes, oiseaux, rue et ambiance synthétisés via Web Audio. Mixage séparé : général, café, voix, rue, oiseaux, cartes, annonces. Les phrases utilisent uniquement une **voix française installée localement**, si disponible ; le jeu reste jouable sans elle. Pas de fichier audio protégé ni de service vocal distant obligatoire.
+Sons de cartes, oiseaux, rue et ambiance synthétisés via Web Audio. Volumes séparés. Aucune annonce vocale automatique ni voix synthétique. Aucun fichier audio protégé.
 
 ## Validation
 
@@ -103,7 +103,7 @@ npm run build
 npm start
 ```
 
-`npm test` couvre **57 tests** : toutes les règles demandées, entrées invalides, confidentialité réseau, salons jusqu’à huit joueurs, reprise de session et parties simulées complètes pour chaque effectif de 2 à 8. Le lanceur reste dans un seul processus pour fonctionner aussi sur les postes Windows restreints.
+`npm test` couvre **65 tests** : toutes les règles demandées, entrées invalides, confidentialité réseau, salons jusqu’à huit joueurs, reprise de session et parties simulées complètes pour chaque effectif de 2 à 8. Le lanceur reste dans un seul processus pour fonctionner aussi sur les postes Windows restreints.
 
 Pour les tests UI automatisés sur deux moteurs :
 
@@ -125,4 +125,32 @@ Le serveur privilégie une interprétation où les Jokers sont internes. En cas 
 
 ### Apparence
 Les cartes sont soutenues par les deux mains au repos. Focus penche le buste et relève les cartes ; Chicha incline le buste vers l'arrière, avec un tuyau qui suit la main. Réglages → Ambiance visuelle : Jour / Nuit, mémorisé sur l'appareil.
+
+
+
+## Nouveautés 6.2 : vestiaire et vannes
+
+Les victoires de parties complètes (dernier joueur après élimination à 200) sont comptées par le serveur. Une victoire par abandon seul ne donne pas de récompense. Un profil anonyme est créé : son jeton secret reste dans le navigateur et ses victoires sont enregistrées côté serveur, sans route pour modifier le compteur.
+
+Paliers : 1 victoire mosaïque, 2 figures or, 3 pose Patron, 5 dos Nuit vivante animé, 7 tenue azur, 10 figures porcelaine, 12 pose Tranquille, 15 tenue prestige, 20 dos Soleil animé. Ouvrir **Vestiaire** et équiper avant de rejoindre un salon. Les deux dos animés sont des matériaux 3D animés ; les aperçus du vestiaire scintillent également.
+
+### Sauvegarde indispensable sur Render
+
+Le Blueprint inclut un disque persistant de 1 Go, monté dans `/var/data`, et `DATA_DIR=/var/data`. Pour un service Render existant, ajouter ce disque et cette variable dans le tableau de bord. Le stockage persistant Render nécessite un service payant : aucune ressource n'est créée par cette archive. Sans disque persistant, les profils sont perdus au redéploiement. Garder une seule instance. En local : fichier `data/profiles.json`, exclu du ZIP et de Git. Le jeton d'accès reste propre à ce navigateur ; pas de compte multi-appareils dans cette version.
+
+Documentation : https://render.com/docs/disks
+
+### Vannes assistées par IA, sans voix automatique
+
+Après un Assaf, les joueurs qui ont contré voient **Chambrer après cet Assaf**. Ils peuvent écrire directement leur message, ou demander une proposition IA puis la modifier et l'envoyer. Aucun texte n'est publié automatiquement. Toutes les voix synthétiques ont été supprimées ; les effets sonores restent disponibles.
+
+Configurer `OPENAI_API_KEY` comme secret dans Render → Environment. `OPENAI_MODEL` est optionnel (défaut `gpt-5.6-luna`). La clé ne doit jamais être préfixée `VITE_`, committée ou collée dans le chat du jeu. Les appels API nécessitent un compte API actif et sont facturés selon ce compte. Seuls le thème écrit par le joueur et le total de l'annonce sont transmis, pas les mains ni les jetons de profil. Trois propositions maximum par Assaf, délai de 15 secondes, trois requêtes simultanées maximum par serveur et expiration à 12 secondes.
+
+Sans clé, l'écriture manuelle fonctionne et la génération indique clairement qu'elle n'est pas configurée. L'intégration a été testée avec des réponses simulées et ses cas d'erreur ; aucun appel réel n'a été effectué sans clé.
+
+Documentation officielle OpenAI : https://developers.openai.com/api/docs/guides/text
+
+### Build Render
+
+Garder `npm install && npm run build` et `npm start`. `.npmrc` inclut les outils nécessaires au build même avec NODE_ENV=production. Le script prestart compile le client si `dist/index.html` manque, pour éviter l'erreur ENOENT observée sur Render.
 

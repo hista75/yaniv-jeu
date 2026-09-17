@@ -278,12 +278,26 @@ export function view(g, id) {
     turnId: g.turnId,
     seatCount: g.seatCount || g.players.length,
     players: g.players.map(
-      ({ id, name, skin, pose, score, hand, eliminated, connected, seat }) => ({
+      ({
         id,
         name,
         skin,
         pose,
         score,
+        hand,
+        eliminated,
+        connected,
+        seat,
+        back,
+        face,
+      }) => ({
+        id,
+        name,
+        skin,
+        pose,
+        score,
+        back,
+        face,
         count: hand.length,
         eliminated,
         connected,
