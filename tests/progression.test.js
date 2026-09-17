@@ -87,3 +87,104 @@ test("IA indisponible ou sans texte : erreur exploitable", async () => {
     /Aucune/,
   );
 });
+
+import { tauntContext, synthesizeTaunt } from "../server/taunts.js";
+test("Compte : migration invité, mot de passe vérifié, sessions partagées et révocation", async () => {
+  const p = new Profiles();
+  const guest = p.create();
+  p.award(guest.token, "game-account");
+  p.equip(guest.token, "back", "mosaic");
+  const registered = await p.register(
+    guest.token,
+    "Djibril",
+    "mot-de-passe-test",
+  );
+  assert.equal(registered.wins, 1);
+  await assert.rejects(p.login("Djibril", "incorrect"), /incorrect/);
+  const login = await p.login("djibril", "mot-de-passe-test");
+  assert.equal(login.equipped.back, "mosaic");
+  p.award(login.token, "game-account-2");
+  assert.equal(p.view(guest.token).wins, 2);
+  assert.equal(JSON.stringify(p.view(login.token)).includes("digest"), false);
+  assert.equal(JSON.stringify(p.data).includes("mot-de-passe-test"), false);
+  p.logout(login.token);
+  assert.equal(p.get(login.token), undefined);
+  assert.equal(p.view(guest.token).wins, 2);
+  await assert.rejects(
+    p.register(p.create().token, "DJIBRIL", "another-password"),
+    /utilisé/,
+  );
+});
+test("Compte : persistance du login après redémarrage et validation des entrées", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "yaniv-account-"));
+  try {
+    const file = path.join(dir, "profiles.json"),
+      p = new Profiles(file),
+      guest = p.create();
+    await assert.rejects(
+      p.register(guest.token, "bad space", "long-password"),
+      /Identifiant/,
+    );
+    await assert.rejects(
+      p.register(guest.token, "okay", "short"),
+      /Mot de passe/,
+    );
+    await p.register(guest.token, "Saved", "long-password");
+    p.award(guest.token, "persist");
+    const reboot = new Profiles(file);
+    assert.equal((await reboot.login("Saved", "long-password")).wins, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+test("Vanne : plus gros score de manche (Joker inclus), ou appelant contré", () => {
+  const r = {
+    callerId: "a",
+    assaf: false,
+    assafIds: ["b"],
+    rows: [
+      { id: "a", points: 0 },
+      { id: "b", points: 12 },
+      { id: "c", points: 20 },
+    ],
+  };
+  assert.equal(tauntContext(r).targetId, "c");
+  assert.deepEqual(tauntContext(r).allowedIds, ["a"]);
+  r.assaf = true;
+  assert.equal(tauntContext(r).targetId, "a");
+  assert.deepEqual(tauntContext(r).allowedIds, ["b"]);
+});
+test("Voix IA : requête bornée, MP3 et absence de clé", async () => {
+  await assert.rejects(
+    synthesizeTaunt({ text: "Test", apiKey: "" }),
+    /non configurée/,
+  );
+  let request;
+  const audio = await synthesizeTaunt({
+    text: "Bien essayé !",
+    apiKey: "test",
+    fetchImpl: async (url, opts) => {
+      assert.equal(url, "https://api.openai.com/v1/audio/speech");
+      request = JSON.parse(opts.body);
+      return {
+        ok: true,
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      };
+    },
+  });
+  assert.equal(request.input, "Bien essayé !");
+  assert.equal(request.response_format, "mp3");
+  assert.equal(audio, "AQID");
+  await assert.rejects(
+    synthesizeTaunt({ text: "x".repeat(181), apiKey: "test" }),
+    /180/,
+  );
+  await assert.rejects(
+    synthesizeTaunt({
+      text: "Test",
+      apiKey: "test",
+      fetchImpl: async () => ({ ok: false }),
+    }),
+    /indisponible/,
+  );
+});

@@ -1,4 +1,4 @@
-# Yaniv Café · 6.2.0
+# Yaniv Café · 6.3.2
 
 Jeu de Yaniv entre amis, de **2 à 8 joueurs**, dans un café djerbien en vraie 3D. Le serveur possède toutes les cartes, valide les actions et calcule les scores. Aucun bot ni joueur fictif n’est créé dans une partie.
 
@@ -81,7 +81,7 @@ Reconnexion : jeton opaque stocké dans `sessionStorage`, place conservée penda
 - Yaniv est annoncé au début de son tour, main ≤7. Une main adverse inférieure **ou égale** provoque un Assaf : l’appelant prend sa main +30. Sinon il prend zéro.
 - Les autres joueurs ajoutent leur main. Le Joker détenu par un adversaire vaut +10 **seulement lors d’un Yaniv réussi** ; il reste à zéro lors d’un Assaf.
 - Objectif : le moins de points possible. Après ajout des points de manche, 50 exactement → 0 ; 100 exactement → 50. Une seule réduction, sans cascade. Aucun effet si le palier est dépassé.
-- À 200 ou plus : élimination. Dernier actif : victoire. Cas limite d’élimination simultanée de tous : le plus petit score final gagne, départagé par l’ordre des sièges en cas d’égalité.
+- Au-dessus de 100 points après les paliers : élimination. Dernier actif : victoire. Cas limite d’élimination simultanée de tous : le plus petit score final gagne, départagé par l’ordre des sièges en cas d’égalité.
 - La défausse retirée est recyclée sans créer de cartes. En dernier recours, lorsque la réserve et les anciennes piles sont vides, la défausse disponible est remélangée pour la pioche ; les mains et la pose du tour ne sont jamais réintroduites.
 - Après **90 secondes d’inactivité par phase**, le serveur joue une carte puis pioche, ou annonce Yaniv si la main le permet. Cette action ne crée pas de joueur artificiel.
 
@@ -130,7 +130,7 @@ Les cartes sont soutenues par les deux mains au repos. Focus penche le buste et 
 
 ## Nouveautés 6.2 : vestiaire et vannes
 
-Les victoires de parties complètes (dernier joueur après élimination à 200) sont comptées par le serveur. Une victoire par abandon seul ne donne pas de récompense. Un profil anonyme est créé : son jeton secret reste dans le navigateur et ses victoires sont enregistrées côté serveur, sans route pour modifier le compteur.
+Les victoires de parties complètes (dernier joueur après élimination au-dessus de 100) sont comptées par le serveur. Une victoire par abandon seul ne donne pas de récompense. Un profil anonyme est créé : son jeton secret reste dans le navigateur et ses victoires sont enregistrées côté serveur, sans route pour modifier le compteur.
 
 Paliers : 1 victoire mosaïque, 2 figures or, 3 pose Patron, 5 dos Nuit vivante animé, 7 tenue azur, 10 figures porcelaine, 12 pose Tranquille, 15 tenue prestige, 20 dos Soleil animé. Ouvrir **Vestiaire** et équiper avant de rejoindre un salon. Les deux dos animés sont des matériaux 3D animés ; les aperçus du vestiaire scintillent également.
 
@@ -154,3 +154,19 @@ Documentation officielle OpenAI : https://developers.openai.com/api/docs/guides/
 
 Garder `npm install && npm run build` et `npm start`. `.npmrc` inclut les outils nécessaires au build même avec NODE_ENV=production. Le script prestart compile le client si `dist/index.html` manque, pour éviter l'erreur ENOENT observée sur Render.
 
+
+### Premier joueur de la manche suivante
+Un Yaniv réussi fait commencer son appelant. En cas d’Assaf, le contreur avec la plus petite valeur de main commence (Joker = 0), puis ordre des sièges en cas d’égalité. Les joueurs éliminés ou partis sont ignorés ; sans candidat restant, le premier siège actif commence.
+
+## Version 6.3 : comptes et vannes vocales
+Le bouton **Compte** permet de créer un identifiant (3–24 caractères) et un mot de passe (10–128 caractères), ou de se connecter. Créer un compte rattache les victoires et équipements de l’invité courant. Se connecter à un compte existant retrouve sa progression sans fusionner celle d’un autre invité. Un même profil ne peut pas occuper deux sièges d’une table.
+
+Les mots de passe sont salés et dérivés avec scrypt ; aucun mot de passe brut n’est stocké. Sessions de 30 jours, dix appareils maximum, déconnexion révocable. Limitation des tentatives de connexion. Pas de récupération par e-mail : conserver son mot de passe. Les comptes nécessitent le même serveur et le disque persistant Render `DATA_DIR=/var/data`. Sauvegarder ce disque ; ne pas publier `data/profiles.json`.
+
+Après un Yaniv réussi, l’appelant peut chambrer le joueur avec le plus de points **dans cette manche**, Joker de fin inclus. En cas d’égalité, ordre des sièges. Après Assaf, les contreurs peuvent chambrer l’appelant. Texte écrit ou généré, modifiable, envoyé explicitement ; une vanne envoyée par joueur autorisé et par manche. Case **Lire à la table avec une voix générée par IA**. Le lecteur permet d’arrêter/rejouer la voix ; le réglage **Voix IA des vannes** permet de la couper. Aucun cri automatique Yaniv/Assaf. Les requêtes terminées après le changement de manche sont annulées.
+
+Configurer `OPENAI_API_KEY` pour texte et voix (appels payants selon le compte API). Voix : `OPENAI_TTS_MODEL=gpt-4o-mini-tts`, `OPENAI_TTS_VOICE=coral`. Sans clé, décocher la voix et écrire manuellement. Intégration suivant la [documentation officielle de synthèse vocale](https://developers.openai.com/api/docs/guides/text-to-speech). Les anciens passages indiquant un profil limité au navigateur sont remplacés par le système de comptes de cette version.
+
+Un Joker peut compléter un groupe de même rang dès deux cartes au total : 7 + Joker, 7 + 7 + Joker. Toutes les cartes de ce groupe sont récupérables dans la défausse précédente, y compris le Joker. Les suites de même enseigne restent de trois cartes minimum.
+
+Assaf subi : la pénalité de l’appelant vaut sa main avec chaque Joker à 10, plus 30. Pour la comparaison Assaf, le Joker reste à 0 ; le score des contreurs conserve cette valeur. Le joueur éliminé reste spectateur jusqu’à la fin, sans nouvelles cartes. À deux, son adversaire gagne immédiatement.

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { io } from "socket.io-client";
 import { makeServer } from "../server/index.js";
 import { total } from "../server/rules.js";
-async function fixture(t) {
-  const server = makeServer();
+async function fixture(t, options = {}) {
+  const server = makeServer(options);
   await new Promise((r) => server.http.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${server.http.address().port}`;
   const clients = [];
@@ -93,7 +93,7 @@ test("Socket.IO : deux joueurs, secret des mains, pose/pioche, chat, reprise, d�
   assert.equal(resume.state.players.length, 1);
   assert.equal(resume.state.phase, "GAME_END");
   const version = await (await fetch(f.url + "/version")).json();
-  assert.equal(version.version, "6.2.0");
+  assert.equal(version.version, "6.3.2");
 });
 test("Socket.IO : capacité 8, entrées en double et payloads malformés refusés", async (t) => {
   const f = await fixture(t),
@@ -172,7 +172,7 @@ test("Socket.IO : victoire serveur débloque le vestiaire, aucune victoire clien
   const g = f.server.rooms.get(entered.code);
   g.players[0].hand = [{ id: "a", rank: "A", suit: "♠", pack: 0 }];
   g.players[1].hand = [{ id: "b", rank: "2", suit: "♠", pack: 0 }];
-  g.players[1].score = 198;
+  g.players[1].score = 99;
   assert.ok((await a.send("yaniv")).ok);
   g.deadline = Date.now() - 1;
   await new Promise((resolve) =>
@@ -212,4 +212,81 @@ test("Socket.IO : vanne refusée sans Assaf et erreur sans clé", async (t) => {
   assert.equal(response.ok, false);
   assert.match(response.error, /non configurée/);
   assert.equal(g.chat.length, 0);
+});
+
+test("Socket.IO : vanne vocale ciblée, autorisations et envoi unique", async (t) => {
+  const f = await fixture(t, {
+    speechGenerator: async ({ text }) => {
+      assert.equal(text, "Bien joué !");
+      return "AQID";
+    },
+  });
+  const a = await f.client(),
+    b = await f.client();
+  const e = await a.send("enter", { create: true, name: "A" });
+  await b.send("enter", { code: e.code, name: "B" });
+  await a.send("start");
+  const g = f.server.rooms.get(e.code);
+  g.players[0].hand = [{ id: "a", rank: "A", suit: "♠" }];
+  g.players[1].hand = [{ id: "b", rank: "9", suit: "♠" }];
+  await a.send("yaniv");
+  assert.equal(
+    (await b.send("taunt-send", { text: "Bien joué !", voice: true })).ok,
+    false,
+  );
+  const heard = new Promise((resolve) => b.socket.once("taunt-voice", resolve));
+  assert.equal(
+    (await a.send("taunt-send", { text: "Bien joué !", voice: true })).ok,
+    true,
+  );
+  const clip = await heard;
+  assert.equal(clip.targetName, "B");
+  assert.equal(clip.audio, "AQID");
+  assert.equal(g.chat.length, 1);
+  assert.equal(
+    (await a.send("taunt-send", { text: "Encore", voice: false })).ok,
+    false,
+  );
+});
+test("Socket.IO : comptes sur deux sessions indépendantes", async (t) => {
+  const f = await fixture(t),
+    a = await f.client(),
+    b = await f.client();
+  const guest = await a.send("profile");
+  const account = await a.send("register", {
+    token: guest.token,
+    username: "CompteTest",
+    password: "test-password-123",
+  });
+  assert.equal(account.ok, true);
+  assert.equal(account.username, "CompteTest");
+  const login = await b.send("login", {
+    username: "CompteTest",
+    password: "test-password-123",
+  });
+  assert.equal(login.ok, true);
+  assert.notEqual(login.token, guest.token);
+  const e = await a.send("enter", {
+    create: true,
+    name: "A",
+    profileToken: guest.token,
+  });
+  assert.equal(
+    (
+      await b.send("enter", {
+        code: e.code,
+        name: "B",
+        profileToken: login.token,
+      })
+    ).ok,
+    false,
+  );
+  assert.equal((await a.send("logout", { token: guest.token })).ok, false);
+  await a.send("leave");
+  assert.equal((await a.send("logout", { token: guest.token })).ok, true);
+  assert.equal((await a.send("profile", { token: guest.token })).ok, false);
+  assert.equal(
+    (await b.send("profile", { token: login.token })).username,
+    "CompteTest",
+  );
 });

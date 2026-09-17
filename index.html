@@ -118,6 +118,15 @@
         <button id="start" class="primary">Lancer la partie</button
         ><small id="lobby-hint"></small>
       </section>
+      <section id="bonus-panel" class="bonus-panel glass" hidden>
+        <strong>Même rang ! Tu peux la rajouter.</strong
+        ><span id="bonus-timer"></span>
+        <div>
+          <button id="bonus-add" class="primary">Rajouter la carte</button
+          ><button id="bonus-keep">Garder la carte</button>
+        </div>
+      </section>
+      <section id="hand-panel" class="hand-panel" hidden>
       <section id="table-actions" class="table-actions glass" hidden>
         <div>
           <small id="discard-label">DÉFAUSSE PRÉCÉDENTE</small>
@@ -128,15 +137,6 @@
           ><span>Piocher<small id="deck-count"></small></span>
         </button>
       </section>
-      <section id="bonus-panel" class="bonus-panel glass" hidden>
-        <strong>Même rang ! Tu peux la rajouter.</strong
-        ><span id="bonus-timer"></span>
-        <div>
-          <button id="bonus-add" class="primary">Rajouter la carte</button
-          ><button id="bonus-keep">Garder la carte</button>
-        </div>
-      </section>
-      <section id="hand-panel" class="hand-panel" hidden>
         <div class="hand-meta">
           <span>TA MAIN <strong id="hand-total"></strong></span
           ><span id="selection-hint">Sélectionne dans l’ordre de pose</span
@@ -178,7 +178,7 @@
       <h2>Un petit score.<br />Un grand moment.</h2>
       <div class="rules-grid">
         <section>
-          <h3>01 · Pose, puis pioche</h3>
+          <p>Si ton Yaniv est contré, chaque Joker de ta main vaut 10 points dans ta pénalité, en plus des 30 points d’Assaf. Pour comparer les mains, il vaut toujours zéro.</p><h3>01 · Pose, puis pioche</h3><p>Le Joker complète aussi les groupes de même rang dès 2 cartes : 7 + Joker, ou 7 + 7 + Joker.</p>
           <p>
             5 cartes chacun. Pose une carte, un groupe de même rang ou une suite
             d’au moins 3 cartes de la même enseigne. Le Joker complète une
@@ -220,7 +220,7 @@
             +10 uniquement si le Yaniv réussit ; il vaut zéro pour un Assaf.
             Après chaque manche, exactement 50 points redescendent à 0 ;
             exactement 100 redescendent à 50 (une seule réduction). Dépasser ces
-            paliers ne change rien. À 200 points, tu es éliminé. Le dernier
+            paliers ne change rien. Au-dessus de 100 points, tu es éliminé. Le dernier
             joueur actif gagne.
           </p>
         </section>

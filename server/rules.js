@@ -56,9 +56,9 @@ export function combination(cards) {
   if (!cards.length || new Set(cards.map((c) => c.id)).size !== cards.length)
     return null;
   if (cards.length === 1) return "single";
-  if (cards.every((c) => c.rank === cards[0].rank)) return "set";
-  if (cards.length < 3 || cards.length > 13) return null;
   const real = cards.filter((c) => c.rank !== "JOKER");
+  if (!real.length || real.every((c) => c.rank === real[0].rank)) return "set";
+  if (cards.length < 3 || cards.length > 13) return null;
   if (!real.length || real.some((c) => c.suit !== real[0].suit)) return null;
   const ranks = real.map((c) => RANKS.indexOf(c.rank));
   if (ranks.some((r) => r < 0) || new Set(ranks).size !== ranks.length)
@@ -129,7 +129,7 @@ export function scoreRound(players, callerId) {
       const points =
         p.id === callerId
           ? assaf
-            ? comparison + 30
+            ? total(p.hand, true) + 30
             : 0
           : total(p.hand, !assaf);
       const subtotal = p.score + points;
@@ -144,7 +144,7 @@ export function scoreRound(players, callerId) {
         subtotal,
         reduction: subtotal - finalTotal,
         total: finalTotal,
-        eliminated: finalTotal >= 200,
+        eliminated: finalTotal > 100,
       };
     }),
   };

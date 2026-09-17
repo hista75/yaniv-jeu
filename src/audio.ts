@@ -4,6 +4,7 @@ export class CafeAudio {
   buses = new Map<string, GainNode>();
   volumes: Record<string, number> = {
     master: 0.45,
+    taunts: 0.65,
     cafe: 0.2,
 
     street: 0.12,
@@ -12,6 +13,33 @@ export class CafeAudio {
     announcements: 0.65,
   };
   timers: number[] = [];
+  tauntPlayer: HTMLAudioElement | null = null;
+  playTaunt(base64: string) {
+    this.tauntPlayer?.pause();
+    document.getElementById("taunt-playback")?.remove();
+    const box = document.createElement("div");
+    box.id = "taunt-playback";
+    box.className = "taunt-playback glass";
+    const label = document.createElement("span");
+    label.textContent = "Vanne · voix générée par IA";
+    const player = new Audio(`data:audio/mpeg;base64,${base64}`);
+    player.controls = true;
+    player.volume = Math.max(
+      0,
+      Math.min(1, this.volumes.master * this.volumes.taunts),
+    );
+    this.tauntPlayer = player;
+    const close = document.createElement("button");
+    close.textContent = "×";
+    close.setAttribute("aria-label", "Arrêter la vanne");
+    close.onclick = () => {
+      player.pause();
+      box.remove();
+    };
+    box.append(label, player, close);
+    document.body.append(box);
+    if (player.volume > 0) void player.play().catch(() => {});
+  }
   constructor() {
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     try {
@@ -48,6 +76,11 @@ export class CafeAudio {
   }
   set(key: string, value: number) {
     this.volumes[key] = value;
+    if (this.tauntPlayer)
+      this.tauntPlayer.volume = Math.max(
+        0,
+        Math.min(1, this.volumes.master * this.volumes.taunts),
+      );
     localStorage.setItem("yaniv-audio", JSON.stringify(this.volumes));
     const gain = key === "master" ? this.master : this.buses.get(key);
     if (gain && this.context)

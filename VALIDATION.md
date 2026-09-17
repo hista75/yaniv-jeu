@@ -1,3 +1,11 @@
+# Version 6.3.0 — 17 septembre 2026
+
+76 tests automatisés réussis. Comptes : migration invité, sauvegarde après redémarrage, mauvais mot de passe, deux connexions, déconnexion révocable, refus de deux sièges pour un profil. Vannes : cibles serveur, autorisation, diffusion vocale à un deuxième client et envoi unique. API texte et voix testées avec réponses simulées ; aucune génération réelle sans clé API. Build TypeScript/Vite réussi.
+
+# Validation 6.2.1 — 17 septembre 2026
+
+70 tests réussis et build TypeScript/Vite réussi. Cinq nouveaux cas couvrent le premier joueur après Yaniv, Assaf simple, Assaf multiple, égalité et élimination. Bloc de pioche déplacé dans le panneau de main ; nouveau placement non contrôlé visuellement dans cette livraison. IA testée avec réponses simulées, pas avec une clé réelle.
+
 # Validation — 16 septembre 2026
 
 ## Version 6.1.0 — vérifications de cette livraison
@@ -46,3 +54,5 @@ Puis, dans un environnement autorisant les navigateurs de test :
 npx playwright install chromium firefox
 npm run test:e2e
 ```
+
+Interface Compte contrôlée dans le navigateur intégré : formulaire et actions visibles, aucune erreur console relevée.

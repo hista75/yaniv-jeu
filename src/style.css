@@ -1844,3 +1844,79 @@ dialog::backdrop {
   font-size: 12px;
   max-width: 440px;
 }
+
+/* Keep draw choices directly above the hand at every viewport size. */
+.hand-panel > .table-actions {
+  position: static;
+  inset: auto;
+  transform: none;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 0 auto 14px;
+}
+.hand-panel > .table-actions > div {
+  min-width: 0;
+  flex: 1;
+}
+.hand-panel .discard-cards {
+  max-width: none;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px;
+}
+.hand-panel .deck-button {
+  width: auto;
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  .hand-panel > .table-actions {
+    padding: 7px;
+    gap: 7px;
+    margin-bottom: 10px;
+  }
+  .hand-panel .deck-button {
+    gap: 5px;
+    padding: 7px;
+  }
+}
+
+.taunt-playback {
+  position: fixed;
+  z-index: 100;
+  top: 75px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+}
+.taunt-playback span {
+  font-size: 11px;
+}
+.taunt-playback audio {
+  width: 240px;
+  max-width: 65vw;
+  height: 34px;
+}
+#taunt-voice {
+  width: auto;
+}
+#account-form {
+  display: grid;
+  gap: 12px;
+}
+#account-form[hidden] {
+  display: none;
+}
+
+#account-form label { display: grid; gap: 6px; }
+#account-form input { width: 100%; box-sizing: border-box; }

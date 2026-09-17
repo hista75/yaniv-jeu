@@ -19,6 +19,7 @@ const socket = io({ autoConnect: false });
 const audio = new CafeAudio();
 type Reward = { id: string; type: string; name: string; wins: number };
 type Profile = {
+  username?: string | null;
   wins: number;
   equipped: Record<string, string>;
   rewards: Reward[];
@@ -509,10 +510,15 @@ function renderResult() {
         : "YANIV !";
   $("result").classList.toggle("assaf", !!r?.assaf);
   $("result").innerHTML =
-    `<div class="eyebrow">${s.phase === "GAME_END" ? "LE DERNIER SURVIVANT" : `MANCHE ${s.round} · LES MAINS SONT RÉVÉLÉES`}</div><h2>${title}</h2>${r ? `<p>${escape(s.players.find((p) => p.id === r.callerId)?.name || "Le joueur")} annonce ${r.callerTotal} points.${r.assaf ? " Une main inférieure ou égale : +30 de pénalité." : " Yaniv réussi : zéro point !"}</p><div class="score-rows">${r.rows.map((row) => `<div class="score-row"><strong>${escape(row.name)}</strong><span>${row.hand.map((c) => (c.rank === "JOKER" ? "Joker" : c.rank + c.suit)).join(" + ")} <b>= ${row.comparison}</b></span><em>+${row.points}${row.reduction ? `<small>Palier exact : ${row.subtotal} → ${row.total}</small>` : ""}</em><strong>${row.total}<small>${row.eliminated ? "ÉLIMINÉ" : "TOTAL"}</small></strong></div>`).join("")}</div>` : ""}${s.phase === "YANIV_REVEAL" ? '<p class="muted">Les cartes se posent…</p>' : s.phase === "ROUND_END" ? `<button id="next-round" class="primary" ${s.hostId !== s.me ? "disabled" : ""}>Manche suivante →</button>${s.hostId !== s.me ? "<small>L’hôte lance la prochaine manche.</small>" : ""}` : '<p class="final-star">✦ ♠ ✦</p><button id="back-menu" class="primary">Retour à l’accueil</button>'}`;
-  if (r?.assaf && r.assafIds.includes(s.me)) {
+    `<div class="eyebrow">${s.phase === "GAME_END" ? "LE DERNIER SURVIVANT" : `MANCHE ${s.round} · LES MAINS SONT RÉVÉLÉES`}</div><h2>${title}</h2>${r ? `<p>${escape(s.players.find((p) => p.id === r.callerId)?.name || "Le joueur")} annonce ${r.callerTotal} points.${r.assaf ? " Une main inférieure ou égale : main avec Jokers à 10, puis +30 de pénalité." : " Yaniv réussi : zéro point !"}</p><div class="score-rows">${r.rows.map((row) => `<div class="score-row"><strong>${escape(row.name)}</strong><span>${row.hand.map((c) => (c.rank === "JOKER" ? "Joker" : c.rank + c.suit)).join(" + ")} <b>= ${row.comparison}</b></span><em>+${row.points}${row.reduction ? `<small>Palier exact : ${row.subtotal} → ${row.total}</small>` : ""}</em><strong>${row.total}<small>${row.eliminated ? "ÉLIMINÉ" : "TOTAL"}</small></strong></div>`).join("")}</div>` : ""}${s.phase === "YANIV_REVEAL" ? '<p class="muted">Les cartes se posent…</p>' : s.phase === "ROUND_END" ? `<button id="next-round" class="primary" ${s.hostId !== s.me ? "disabled" : ""}>Manche suivante →</button>${s.hostId !== s.me ? "<small>L’hôte lance la prochaine manche.</small>" : ""}` : '<p class="final-star">✦ ♠ ✦</p><button id="back-menu" class="primary">Retour à l’accueil</button>'}`;
+  if (r && (r.assaf ? r.assafIds.includes(s.me) : r.callerId === s.me)) {
     const button = document.createElement("button");
-    button.textContent = "😏 Chambrer après cet Assaf";
+    const target = r.assaf
+      ? r.rows.find((row) => row.id === r.callerId)
+      : [...r.rows]
+          .filter((row) => row.id !== r.callerId)
+          .sort((a, b) => b.points - a.points)[0];
+    button.textContent = `😏 Chambrer ${target?.name || "la plus grosse main"}`;
     button.className = "secondary";
     button.onclick = () => $<HTMLDialogElement>("taunt-dialog").showModal();
     $("result").append(button);
@@ -569,7 +575,8 @@ const volumeLabels: Record<string, string> = {
   street: "Rue",
   birds: "Oiseaux",
   cards: "Cartes",
-  announcements: "Yaniv / Assaf",
+  announcements: "Effets Yaniv / Assaf",
+  taunts: "Voix IA des vannes",
 };
 $("volume-settings").innerHTML = Object.entries(volumeLabels)
   .map(
@@ -607,8 +614,8 @@ $("time-of-day").onchange = () => {
 document.body.insertAdjacentHTML(
   "beforeend",
   `
-<dialog id="wardrobe-dialog"><button class="close-dialog" id="close-wardrobe" aria-label="Fermer le vestiaire">×</button><div class="eyebrow">LES HABITUÉS DU CAFÉ</div><h2>Ton vestiaire.</h2><p id="wins-count"></p><p class="muted">Les victoires de parties complètes débloquent les récompenses. Équipe-les avant de rejoindre une table.</p><div id="rewards-grid"></div><p class="muted">Profil sauvegardé sur ce navigateur. Ne supprime pas ses données pour conserver ton accès.</p></dialog>
-<dialog id="taunt-dialog"><button class="close-dialog" id="close-taunt" aria-label="Fermer la vanne">×</button><div class="eyebrow">BIEN ESSAYÉ !</div><h2>La vanne d’Assaf.</h2><label>Une idée pour l’IA ?<input id="taunt-idea" maxlength="120" placeholder="Ex. son bluff, le café, les +30…"></label><button id="generate-taunt" class="secondary">Proposer une vanne avec l’IA</button><p id="taunt-status" role="status"></p><label>Ton message, modifiable<textarea id="taunt-draft" maxlength="180" rows="3" placeholder="Écris ta vanne ici…"></textarea></label><button id="send-taunt" class="primary">Envoyer à la table</button></dialog>`,
+<dialog id="wardrobe-dialog"><button class="close-dialog" id="close-wardrobe" aria-label="Fermer le vestiaire">×</button><div class="eyebrow">LES HABITUÉS DU CAFÉ</div><h2>Ton vestiaire.</h2><p id="wins-count"></p><p class="muted">Les victoires de parties complètes débloquent les récompenses. Équipe-les avant de rejoindre une table.</p><div id="rewards-grid"></div><p class="muted">Crée un compte avec le bouton Compte pour retrouver tes récompenses sur un autre appareil.</p></dialog>
+<dialog id="taunt-dialog"><button class="close-dialog" id="close-taunt" aria-label="Fermer la vanne">×</button><div class="eyebrow">BIEN ESSAYÉ !</div><h2>La vanne de la manche.</h2><label>Une idée pour l’IA ?<input id="taunt-idea" maxlength="120" placeholder="Ex. son bluff, le café, les +30…"></label><button id="generate-taunt" class="secondary">Proposer une vanne avec l’IA</button><p id="taunt-status" role="status"></p><label>Ton message, modifiable<textarea id="taunt-draft" maxlength="180" rows="3" placeholder="Écris ta vanne ici…"></textarea></label><label><input type="checkbox" id="taunt-voice" checked> Lire à la table avec une voix générée par IA</label><button id="send-taunt" class="primary">Envoyer à la table</button></dialog>`,
 );
 const wardrobeButton = document.createElement("button");
 wardrobeButton.id = "wardrobe-button";
@@ -666,13 +673,11 @@ function renderWardrobe() {
     b.onclick = async () => {
       b.disabled = true;
       try {
-        const res = await socket
-          .timeout(6000)
-          .emitWithAck("equip", {
-            token: localStorage.getItem("yaniv-profile"),
-            type: r.type,
-            id: r.id,
-          });
+        const res = await socket.timeout(6000).emitWithAck("equip", {
+          token: localStorage.getItem("yaniv-profile"),
+          type: r.type,
+          id: r.id,
+        });
         if (!res.ok) throw new Error(res.error);
         applyProfile(res);
       } catch (e) {
@@ -703,9 +708,92 @@ $("generate-taunt").onclick = async () => {
 $("send-taunt").onclick = async () => {
   const text = $<HTMLTextAreaElement>("taunt-draft").value.trim();
   if (!text) return;
-  const result = await send("chat", { text });
+  const button = $<HTMLButtonElement>("send-taunt");
+  button.disabled = true;
+  $("taunt-status").textContent = "Envoi de la vanne…";
+  let result = false;
+  try {
+    const response = await socket
+      .timeout(25000)
+      .emitWithAck("taunt-send", {
+        text,
+        voice: $<HTMLInputElement>("taunt-voice").checked,
+      });
+    if (!response.ok) throw new Error(response.error);
+    result = true;
+  } catch (e) {
+    $("taunt-status").textContent = (e as Error).message;
+  } finally {
+    button.disabled = false;
+  }
   if (result) {
     $<HTMLDialogElement>("taunt-dialog").close();
     $<HTMLTextAreaElement>("taunt-draft").value = "";
   }
 };
+
+socket.on("taunt-voice", ({ text, audio: clip, targetName, round }) => {
+  if (!state || state.round !== round) return;
+  toast(`À ${targetName} : ${text}`);
+  if (clip) audio.playTaunt(clip);
+});
+document.body.insertAdjacentHTML(
+  "beforeend",
+  `<dialog id="account-dialog"><button id="close-account" class="close-dialog" aria-label="Fermer">×</button><h2>Ton compte café.</h2><p id="account-status" role="status"></p><form id="account-form"><label>Identifiant<input id="account-name" autocomplete="username" minlength="3" maxlength="24" required pattern="[a-zA-Z0-9_]{3,24}"></label><label>Mot de passe<input id="account-password" type="password" autocomplete="current-password" minlength="10" maxlength="128" required></label><button type="submit" class="primary">Se connecter</button><button type="button" id="register-account">Créer mon compte et garder mes victoires</button></form><button id="logout-account">Se déconnecter</button><p class="muted">Conserve ton mot de passe : la récupération par e-mail n’est pas disponible. Un compte retrouve sa progression sur le même serveur, sur tous tes appareils.</p></dialog>`,
+);
+const accountButton = document.createElement("button");
+accountButton.className = "icon-btn";
+accountButton.textContent = "Compte";
+$("wardrobe-button").after(accountButton);
+accountButton.onclick = () => {
+  $("account-status").textContent = profile?.username
+    ? `Connecté : ${profile.username} · ${profile.wins} victoire(s)`
+    : "Invité : crée un compte pour conserver ta progression.";
+  $("account-form").hidden = !!profile?.username;
+  $("logout-account").hidden = !profile?.username;
+  $<HTMLDialogElement>("account-dialog").showModal();
+};
+$("close-account").onclick = () =>
+  $<HTMLDialogElement>("account-dialog").close();
+let accountPending = false;
+async function accountAction(mode: string) {
+  if (accountPending) return;
+  if (state) {
+    $("account-status").textContent =
+      "Quitte la table avant de changer de compte.";
+    return;
+  }
+  if (mode !== "logout" && !$<HTMLFormElement>("account-form").reportValidity())
+    return;
+  accountPending = true;
+  $("account-status").textContent = "Connexion au café…";
+  try {
+    await ensureProfile();
+    const r = await socket
+      .timeout(10000)
+      .emitWithAck(mode, {
+        token: localStorage.getItem("yaniv-profile"),
+        username: $<HTMLInputElement>("account-name").value,
+        password: $<HTMLInputElement>("account-password").value,
+      });
+    if (!r.ok) throw new Error(r.error);
+    localStorage.setItem("yaniv-profile", r.token);
+    applyProfile(r);
+    $<HTMLInputElement>("account-password").value = "";
+    $("account-form").hidden = !!r.username;
+    $("logout-account").hidden = !r.username;
+    $("account-status").textContent = r.username
+      ? `Connecté : ${r.username} · ${r.wins} victoire(s)`
+      : "Déconnecté. Tu joues maintenant en invité.";
+  } catch (e) {
+    $("account-status").textContent = (e as Error).message;
+  } finally {
+    accountPending = false;
+  }
+}
+$("account-form").onsubmit = (e) => {
+  e.preventDefault();
+  void accountAction("login");
+};
+$("register-account").onclick = () => void accountAction("register");
+$("logout-account").onclick = () => void accountAction("logout");

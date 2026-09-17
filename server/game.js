@@ -65,7 +65,17 @@ export function dealRound(g) {
   for (const p of g.players) p.hand = p.eliminated ? [] : g.deck.splice(0, 5);
   g.previousDiscard = { cards: [g.deck.pop()], kind: "single" };
   g.currentPlay = emptyPile();
-  g.turnId = alive[g.round % alive.length].id;
+  // Lowest Assaf hand leads; ties keep the fixed seat order.
+  const previous = g.result;
+  const candidates = previous
+    ? previous.assaf
+      ? previous.rows
+          .filter((row) => previous.assafIds.includes(row.id))
+          .sort((a, b) => a.comparison - b.comparison)
+          .map((row) => row.id)
+      : [previous.callerId]
+    : [];
+  g.turnId = candidates.find((id) => alive.some((p) => p.id === id)) || alive[0].id;
   g.round++;
   g.phase = "PLAY";
   g.bonusId = null;

@@ -1,6 +1,6 @@
 {
   "name": "yaniv-cafe",
-  "version": "6.1.0",
+  "version": "6.3.2",
   "private": true,
   "type": "module",
   "description": "Yaniv multijoueur autoritaire dans un café djerbien en 3D",
@@ -12,7 +12,8 @@
     "build": "tsc --noEmit && node scripts/build.mjs",
     "start": "node server/index.js",
     "test": "node tests/run.js",
-    "test:e2e": "node scripts/e2e.mjs"
+    "test:e2e": "node scripts/e2e.mjs",
+    "prestart": "node scripts/ensure-build.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",

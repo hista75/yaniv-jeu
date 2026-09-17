@@ -1,6 +1,6 @@
 import express from "express";
 import { Profiles } from "./progression.js";
-import { generateTaunt } from "./taunts.js";
+import { generateTaunt, synthesizeTaunt, tauntContext } from "./taunts.js";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -26,9 +26,12 @@ export function makeServer({
     ? path.join(process.env.DATA_DIR, "profiles.json")
     : null,
   tauntGenerator = generateTaunt,
+  speechGenerator = synthesizeTaunt,
 } = {}) {
   const profiles = new Profiles(profileFile);
-  let aiActive = 0;
+  let aiActive = 0,
+    authActive = 0;
+  const authAttempts = new Map();
   const app = express();
   const http = createServer(app);
   const io = new Server(http, { maxHttpBufferSize: 8192, serveClient: false });
@@ -43,8 +46,8 @@ export function makeServer({
   app.get("/version", (_, res) =>
     res.json({
       name: "Yaniv Café",
-      version: "6.2.0",
-      build: process.env.RENDER_GIT_COMMIT?.slice(0, 12) || "6.2.0-local",
+      version: "6.3.2",
+      build: process.env.RENDER_GIT_COMMIT?.slice(0, 12) || "6.3.2-local",
       rules: "djerbien-2026-09",
       uptime: Math.floor(process.uptime()),
     }),
@@ -132,13 +135,14 @@ export function makeServer({
     action("equip", (data) => profiles.equip(data.token, data.type, data.id));
     action("taunt", async (data) => {
       const g = game();
+      const context = tauntContext(g.result);
       check(
-        g.result?.assaf && g.result.assafIds.includes(session.playerId),
-        "Les vannes Assaf sont disponibles après ton contre.",
+        context.allowedIds.includes(session.playerId),
+        "Seul le gagnant du Yaniv ou un contreur Assaf peut chambrer.",
       );
       check(
         ["YANIV_REVEAL", "ROUND_END", "GAME_END"].includes(g.phase),
-        "Cet Assaf est terminé.",
+        "Cette manche est terminée.",
       );
       check(
         typeof data.idea === "string" && data.idea.length <= 120,
@@ -147,7 +151,7 @@ export function makeServer({
       check(
         Date.now() - (session.lastTaunt || 0) > 15000 &&
           (session.tauntRound !== g.round || (session.tauntCount || 0) < 3),
-        "Maximum trois propositions par Assaf, espacées de 15 secondes.",
+        "Maximum trois propositions par manche, espacées de 15 secondes.",
       );
       check(
         aiActive < 3,
@@ -165,9 +169,102 @@ export function makeServer({
           text: await tauntGenerator({
             idea: data.idea,
             callerTotal: g.result.callerTotal,
+            ...context,
           }),
         };
       } finally {
+        aiActive--;
+      }
+    });
+    for (const mode of ["register", "login"])
+      action(mode, async (data) => {
+        check(!session, "Quitte la table avant de changer de compte.");
+        const ip = socket.handshake.address,
+          now = Date.now();
+        for (const [key, times] of authAttempts)
+          if (!times.some((t) => now - t < 60000)) authAttempts.delete(key);
+        const attempts = (authAttempts.get(ip) || []).filter(
+          (t) => now - t < 60000,
+        );
+        check(
+          attempts.length < 5 && authActive < 3,
+          "Trop de tentatives. Attends une minute.",
+        );
+        attempts.push(now);
+        authAttempts.set(ip, attempts);
+        authActive++;
+        try {
+          return mode === "register"
+            ? await profiles.register(data.token, data.username, data.password)
+            : await profiles.login(data.username, data.password);
+        } finally {
+          authActive--;
+        }
+      });
+    action("logout", (data) => {
+      check(!session, "Quitte la table avant de te déconnecter.");
+      profiles.logout(data.token);
+      return profiles.create();
+    });
+    action("taunt-send", async (data) => {
+      const g = game(),
+        context = tauntContext(g.result);
+      check(
+        ["YANIV_REVEAL", "ROUND_END", "GAME_END"].includes(g.phase),
+        "Cette manche est terminée.",
+      );
+      check(
+        context.allowedIds.includes(session.playerId),
+        "Tu ne peux pas chambrer pour ce résultat.",
+      );
+      check(
+        typeof data.text === "string" &&
+          data.text.trim().length > 0 &&
+          data.text.length <= 180,
+        "Message invalide (180 caractères maximum).",
+      );
+      check(typeof data.voice === "boolean", "Choix de voix invalide.");
+      check(
+        session.voiceRound !== g.round && !session.voicePending,
+        "Une seule vanne envoyée par manche.",
+      );
+      check(aiActive < 3, "Le comptoir est occupé. Réessaie bientôt.");
+      const requestSession = session;
+      const round = g.round,
+        result = g.result,
+        senderId = session.playerId;
+      const player = g.players.find((p) => p.id === senderId);
+      const text = data.text.trim();
+      session.voicePending = true;
+      aiActive++;
+      try {
+        const audio = data.voice ? await speechGenerator({ text }) : null;
+        check(
+          rooms.get(g.code) === g &&
+            g.round === round &&
+            g.result === result &&
+            g.players.some((p) => p.id === senderId) &&
+            ["YANIV_REVEAL", "ROUND_END", "GAME_END"].includes(g.phase),
+          "La manche a changé : vanne annulée.",
+        );
+        requestSession.voiceRound = round;
+        g.chat.push({
+          id: randomUUID(),
+          playerId: player.id,
+          name: player.name,
+          text: `À ${context.targetName} : ${text}`,
+          at: Date.now(),
+        });
+        g.chat = g.chat.slice(-60);
+        broadcast(g);
+        io.to(g.code).emit("taunt-voice", {
+          text,
+          audio,
+          targetName: context.targetName,
+          round,
+        });
+      } finally {
+        requestSession.voicePending = false;
         aiActive--;
       }
     });
@@ -207,6 +304,11 @@ export function makeServer({
       const token = randomBytes(32).toString("hex"),
         id = randomUUID();
       const profile = profiles.get(data.profileToken);
+      check(
+        !profile ||
+          !g.players.some((p) => profiles.get(p.profileToken) === profile),
+        "Ce profil est déjà assis à cette table.",
+      );
       const equipped = profile?.equipped || {
         back: "classic",
         face: "classic",
@@ -348,7 +450,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   });
   const port = Number(process.env.PORT) || 3000;
   server.http.listen(port, "0.0.0.0", () =>
-    console.log(`Yaniv Café 6.2.0 — http://localhost:${port}`),
+    console.log(`Yaniv Café 6.3.2 — http://localhost:${port}`),
   );
   for (const signal of ["SIGTERM", "SIGINT"])
     process.on(signal, async () => {

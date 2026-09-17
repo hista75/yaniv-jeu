@@ -190,7 +190,7 @@ test("Assaf égal avec Joker = zéro", () => {
   assert.equal(r.rows[1].comparison, 2);
   assert.equal(r.rows[1].points, 2);
 });
-test("Joker +10 uniquement après Yaniv réussi", () => {
+test("Joker +10 des adversaires après Yaniv réussi", () => {
   const r = scoreRound([p("a", [c("A")]), p("b", [c("2"), c("JOKER")])], "a");
   assert.equal(r.assaf, false);
   assert.equal(r.rows[0].points, 0);
@@ -198,10 +198,10 @@ test("Joker +10 uniquement après Yaniv réussi", () => {
 });
 test("figures 10, As 1, Joker zéro", () =>
   assert.equal(total([c("V"), c("D"), c("R"), c("A"), c("JOKER")]), 31));
-test("élimination à 200, gagnant", () => {
+test("élimination à 101, gagnant", () => {
   const g = setup([c("A")]);
   g.players[1].hand = [c("2")];
-  g.players[1].score = 198;
+  g.players[1].score = 99;
   yaniv(g, "0");
   settle(g);
   assert.equal(g.players[1].eliminated, true);
@@ -212,7 +212,7 @@ test("éliminé visible mais non distribué, manche suivante", () => {
   const g = game(3);
   g.players[0].hand = [c("A")];
   g.players[1].hand = [c("9")];
-  g.players[1].score = 199;
+  g.players[1].score = 99;
   g.players[2].hand = [c("8")];
   yaniv(g, "0");
   settle(g);
@@ -377,3 +377,78 @@ for (const rank of ["5", "6"])
     assert.equal(ids.includes(cards[0].id), true);
     assert.equal(ids.includes(extra.id), rank === "5");
   });
+
+for (const [label, ranks, expected] of [
+  ['Yaniv réussi', ['9', '2', '8'], '1'],
+  ['Assaf unique', ['6', '5', '9'], '1'],
+  ['plusieurs Assaf : main minimale', ['6', '4', '2'], '2'],
+  ['Assaf égaux : ordre des sièges', ['6', '2', '2'], '1'],
+]) {
+  test(`Premier joueur de la manche suivante : ${label}`, () => {
+    const g = game(3);
+    g.players.forEach((p, i) => { p.hand = [c(ranks[i])]; });
+    const caller = label === 'Yaniv réussi' ? '1' : '0';
+    g.turnId = caller;
+    yaniv(g, caller);
+    settle(g);
+    nextRound(g, g.hostId);
+    assert.equal(g.turnId, expected);
+    assert.equal(g.phase, 'PLAY');
+    assert.ok(g.players.every(p => p.hand.length === 5));
+  });
+}
+test('Un joueur éliminé par son Assaf ne commence pas la prochaine manche', () => {
+  const g = game(4);
+  g.players.forEach((p, i) => { p.hand = [c(['6','2','3','9'][i])]; });
+  g.players[1].score = 99;
+  yaniv(g, '0'); settle(g); nextRound(g, g.hostId);
+  assert.equal(g.turnId, '2');
+});
+
+test('Joker wildcard dans un groupe dès deux cartes, ordre libre', () => {
+  for (const cards of [[c('7'),c('JOKER')], [c('JOKER'),c('7')], [c('7'),c('7','♥'),c('JOKER')], [c('7'),c('JOKER'),c('JOKER')]]) {
+    assert.equal(combination(cards), 'set');
+    assert.deepEqual(pickupIds({kind:'set',cards}), cards.map(c => c.id));
+  }
+});
+test('Joker ne transforme pas des rangs différents en groupe', () => {
+  assert.equal(combination([c('7','♥'),c('8','♠'),c('JOKER')]), null);
+  assert.equal(combination([c('V','♥'),c('D','♠'),c('JOKER')]), null);
+  assert.equal(combination([c('7','♥'),c('8','♥'),c('JOKER')]), 'run');
+});
+test('Pose serveur 7 + Joker puis récupération du Joker par le suivant', () => {
+  const g = game(), seven = c('7'), joker = c('JOKER');
+  g.players[0].hand = [seven, joker, c('9')];
+  g.deck = [c('2')];
+  play(g, '0', [joker.id, seven.id]);
+  assert.equal(g.currentPlay.kind, 'set');
+  draw(g, '0', 'deck');
+  play(g, '1', [g.players[1].hand[0].id]);
+  draw(g, '1', 'discard', joker.id);
+  assert.ok(g.players[1].hand.some(card => card.id === joker.id));
+});
+
+test('Assaf : Jokers de l’appelant à 10 pour la pénalité, à zéro pour comparer', () => {
+  const r = scoreRound([p('a',[c('2'),c('JOKER'),c('JOKER')]), p('b',[c('2'),c('JOKER')])], 'a');
+  assert.equal(r.assaf, true);
+  assert.equal(r.callerTotal, 2);
+  assert.equal(r.rows[0].comparison, 2);
+  assert.equal(r.rows[0].points, 52);
+  assert.equal(r.rows[1].points, 2);
+});
+test('Élimination strictement au-dessus de 100 après application des paliers', () => {
+  for (const [before, expected, eliminated] of [[97,99,false],[98,50,false],[99,101,true]]) {
+    const r = scoreRound([p('a',[c('A')]),p('b',[c('2')],before)],'a');
+    assert.equal(r.rows[1].total, expected);
+    assert.equal(r.rows[1].eliminated, eliminated);
+  }
+});
+test('Assaf avec Joker fait dépasser 100 : adversaire gagnant à deux', () => {
+  const g = game();
+  g.players[0].hand = [c('2'),c('JOKER')]; g.players[0].score = 60;
+  g.players[1].hand = [c('A')];
+  yaniv(g,'0'); settle(g);
+  assert.equal(g.players[0].score, 102);
+  assert.equal(g.players[0].eliminated, true);
+  assert.equal(g.phase,'GAME_END'); assert.equal(g.winnerId,'1');
+});
